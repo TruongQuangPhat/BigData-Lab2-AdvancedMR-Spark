@@ -1,0 +1,16 @@
+classes/
+*.class
+
+*.jar
+
+*.csv
+
+target/
+project/target/
+
+.vscode/
+.idea/
+*.iml
+.bloop/
+.metals/
+.DS_Store
