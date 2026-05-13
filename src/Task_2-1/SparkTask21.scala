@@ -1,0 +1,141 @@
+package lab2.task21
+
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types._
+
+object SparkTask21 {
+  def main(args: Array[String]): Unit = {
+    if (args.length < 2) {
+      System.err.println("Usage: SparkTask21 <input_csv> <output_dir>")
+      System.exit(1)
+    }
+
+    val inputPath = args(0)
+    val outputPath = args(1)
+
+    val spark = SparkSession.builder()
+      .appName("Task 2-1: Advanced Spark Structured API")
+      // .master("local[*]") // uncomment if running locally without spark-submit
+      .getOrCreate()
+
+    // Required for some dataframe operations
+    spark.sparkContext.setLogLevel("ERROR")
+
+    // Load CSV
+    val rawDf = spark.read
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .csv(inputPath)
+
+    // Preprocessing: Parse Date and Amount
+    // Date format in CSV is MM-dd-yy (e.g., 04-30-22)
+    val df = rawDf
+      .withColumn("ParsedDate", to_date(col("Date"), "MM-dd-yy"))
+      .withColumn("AmountNum", col("Amount").cast(DoubleType))
+
+    // ------------------------------------------------------------------------
+    // JOB 1: Build Promotion
+    // "xây promotion (khác null, khác empty), groupby id checkdate, lọc >= 2"
+    // ------------------------------------------------------------------------
+    val validPromotionsDf = df
+      .filter(col("promotion-ids").isNotNull && trim(col("promotion-ids")) =!= "")
+      .withColumn("promotion_id", explode(split(col("promotion-ids"), ",")))
+      .withColumn("promotion_id", trim(col("promotion_id")))
+      .filter(col("promotion_id").isNotNull && col("promotion_id") =!= "")
+      .groupBy("promotion_id")
+      .agg(
+        min("ParsedDate").alias("first_appearance"),
+        max("ParsedDate").alias("last_appearance")
+      )
+      .withColumn("active_period", datediff(col("last_appearance"), col("first_appearance")))
+      .filter(col("active_period") >= 2)
+      .select("promotion_id")
+
+    // ------------------------------------------------------------------------
+    // JOB 2: Count Promo by Order
+    // "đếm promo by order (table promo inner join order, groupby order đếm promo >= 3)"
+    // ------------------------------------------------------------------------
+    val orderPromosDf = df
+      .filter(col("promotion-ids").isNotNull && trim(col("promotion-ids")) =!= "")
+      .select("Order ID", "promotion-ids")
+      .withColumn("promotion_id", explode(split(col("promotion-ids"), ",")))
+      .withColumn("promotion_id", trim(col("promotion_id")))
+      .join(validPromotionsDf, Seq("promotion_id"), "inner")
+      .groupBy("Order ID")
+      .agg(count("promotion_id").alias("valid_promo_count"))
+      .filter(col("valid_promo_count") >= 3)
+      .select("Order ID")
+
+    // ------------------------------------------------------------------------
+    // JOB 3: Filter Merchant & Shipped
+    // "groupby ship state, tính AVG (amount), table(state, avg)"
+    // ------------------------------------------------------------------------
+    val stateAvgDf = df
+      .filter(col("Fulfilment") === "Merchant" && col("Courier Status") === "Shipped")
+      .filter(col("ship-state").isNotNull && trim(col("ship-state")) =!= "")
+      // Convert to uppercase to prevent state name inconsistencies (similar to Task 1)
+      .withColumn("ship-state-upper", upper(trim(col("ship-state"))))
+      .groupBy("ship-state-upper")
+      .agg(avg("AmountNum").alias("state_avg_amount"))
+
+    // ------------------------------------------------------------------------
+    // JOB 4: Find Qualified Orders
+    // "filter -> canceled -> join job 3 -> lọc amount < avg"
+    // "filter -> standard -> join job 2"
+    // ------------------------------------------------------------------------
+    val targetOrdersDf = df
+      .filter(col("Status") === "Cancelled" && col("ship-service-level") === "Standard")
+      .filter(col("ship-city").isNotNull && trim(col("ship-city")) =!= "")
+      .withColumn("ship-state-upper", upper(trim(col("ship-state"))))
+      .withColumn("ship-city-upper", upper(trim(col("ship-city"))))
+
+    val qualifiedOrdersDf = targetOrdersDf
+      // Join Job 3 (State Avg)
+      .join(stateAvgDf, Seq("ship-state-upper"), "inner")
+      // Filter Amount < Avg
+      .filter(col("AmountNum") < col("state_avg_amount"))
+      // Join Job 2 (Orders with >= 3 valid promos)
+      .join(orderPromosDf, Seq("Order ID"), "inner")
+
+    // ------------------------------------------------------------------------
+    // JOB 5: Calculate Percentage per City
+    // "đếm order quality từ job 4 (numerator), đếm canceled standard -> denominator, join theo city"
+    // ------------------------------------------------------------------------
+    val denominatorDf = targetOrdersDf
+      .groupBy("ship-city-upper")
+      .agg(count("Order ID").alias("total_cancelled_standard"))
+
+    val numeratorDf = qualifiedOrdersDf
+      .groupBy("ship-city-upper")
+      .agg(count("Order ID").alias("qualified_count"))
+
+    val resultDf = denominatorDf
+      .join(numeratorDf, Seq("ship-city-upper"), "left")
+      .withColumn("qualified_count_clean", coalesce(col("qualified_count"), lit(0)))
+      .withColumn("percentage", round((col("qualified_count_clean") / col("total_cancelled_standard")) * 100, 2))
+      .select(
+        col("ship-city-upper").alias("City"),
+        col("percentage").alias("Percentage_Qualified_Cancelled_Standard")
+      )
+      .orderBy("City")
+
+    // ========================================================================
+    // OUTPUT EXPLAIN PLAN TO CONSOLE AS REQUIRED
+    // ========================================================================
+    println("\n" + "="*80)
+    println(">>> EXTENDED EXECUTION PLAN FOR TASK 2-1 <<<")
+    println("="*80)
+    resultDf.explain(true)
+    println("="*80 + "\n")
+
+    // Save Output
+    resultDf
+      .coalesce(1) // Export into a single file as required
+      .write
+      .mode("overwrite")
+      .parquet(outputPath)
+
+    spark.stop()
+  }
+}
