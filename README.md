@@ -163,10 +163,8 @@ Month,State,MedianVariety
 ```
 
 ### Task 2-2 Output Format (`Task_2-2.parquet`):
-Định dạng file xuất ra là **Parquet** dạng Wide format, bao gồm 15 cột siêu chi tiết:
+Định dạng file xuất ra là **Parquet** dạng Wide format, bao gồm 15 cột:
 `SKU, Month, total_orders, threshold_p80_approx, threshold_p90_approx, orders_p80_approx, orders_p90_approx, stddev_p80_approx, stddev_p90_approx, threshold_p80_exact, threshold_p90_exact, orders_p80_exact, orders_p90_exact, stddev_p80_exact, stddev_p90_exact`
-
-*(Bạn có thể sử dụng file `check_Task_2-2.ipynb` bằng Python/Pandas có sẵn trong dự án để kiểm tra nội dung file Parquet này).*
 
 ---
 
