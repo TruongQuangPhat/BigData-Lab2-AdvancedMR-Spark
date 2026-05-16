@@ -1,0 +1,39 @@
+{
+  "task": "Task_1-2",
+  "framework": "Hadoop MapReduce",
+  "benchmark_type": "job_runtime",
+  "description": "Benchmark measures only the execution time of the Hadoop MapReduce job. Compilation, JAR packaging, HDFS input preparation, getmerge, and local post-processing are excluded.",
+  "input_path": "/lab03/input/Amazon_Sale_Report.csv",
+  "output_path": "/lab03/output/task1-2",
+  "main_class": "lab03.MedianVarietyJob",
+  "number_of_runs": 5,
+  "runs": [
+    {
+      "run": 1,
+      "runtime_seconds": 50.549443
+    },
+    {
+      "run": 2,
+      "runtime_seconds": 43.712807
+    },
+    {
+      "run": 3,
+      "runtime_seconds": 48.352254
+    },
+    {
+      "run": 4,
+      "runtime_seconds": 42.907466
+    },
+    {
+      "run": 5,
+      "runtime_seconds": 43.021861
+    }
+  ],
+  "statistics": {
+    "mean_seconds": 45.708766,
+    "stddev_seconds": 3.516773,
+    "min_seconds": 42.907466,
+    "max_seconds": 50.549443
+  },
+  "created_at": "2026-05-16T23:32:28"
+}
