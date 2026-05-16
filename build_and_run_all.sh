@@ -51,7 +51,8 @@ echo "Submitting Task 2.2 to Spark..."
 spark-submit \
   --class Task22 \
   --master local[*] \
-  Task_2_2.jar
+  Task_2_2.jar 2>&1 | tee task_2-2_stats.log
+
 
 rm -f Task_2-2.parquet
 hadoop fs -get /lab2/output/Task_2-2.parquet ./Task_2-2.parquet
