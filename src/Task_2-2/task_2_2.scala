@@ -357,19 +357,6 @@ object Task22 {
     println(s"   Groups with P90 mismatch       : $nMismatchP90 " +
             f"(${nMismatchP90 * 100.0 / totalGroups}%.1f%%)")
 
-    if (nMismatchP80 > 0) {
-      println("\n   Sample P80 mismatches (top 5):")
-      mismatchP80
-        .select("SKU", "Month", "p80_approx", "p80_exact")
-        .show(5, truncate = false)
-    }
-    if (nMismatchP90 > 0) {
-      println("\n   Sample P90 mismatches (top 5):")
-      mismatchP90
-        .select("SKU", "Month", "p90_approx", "p90_exact")
-        .show(5, truncate = false)
-    }
-
     // Nhóm nào có tập đơn hàng hợp lệ hoặc độ lệch chuẩn khác nhau?
     val p80ApproxLog = resultP80_approx
       .select(col("SKU"), col("Month"), col("order_count").as("count_approx"), col("stddev_amount").as("stddev_approx"))
@@ -382,11 +369,6 @@ object Task22 {
 
     val nOrderDiff = orderDiff.count()
     println(s"\n   Groups (P80) with different eligible order counts / stddev: $nOrderDiff")
-    if (nOrderDiff > 0) {
-      orderDiff
-        .select("SKU", "Month", "count_approx", "count_exact", "stddev_approx", "stddev_exact")
-        .show(10, truncate = false)
-    }
 
     // Có nhóm nào > 1,000 đơn không?
     val largeGroups = orders
@@ -395,7 +377,6 @@ object Task22 {
       .filter(col("cnt") > 1000)
     val nLarge = largeGroups.count()
     println(s"\n   SKU-Month groups with > 1,000 orders: $nLarge")
-    if (nLarge > 0) largeGroups.orderBy(col("cnt").desc).show(10, truncate = false)
 
     println("\n[OK] Task 2.2.2 completed successfully.")
     println(s"  Output: $OUTPUT_PATH")
