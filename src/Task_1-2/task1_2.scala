@@ -1,4 +1,4 @@
-package lab2.task12
+package lab03
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem}
