@@ -16,7 +16,7 @@ Tất cả các lệnh dưới đây được thực thi tại thư mục gốc 
 Đảm bảo bạn đang đứng tại thư mục gốc trước khi bắt đầu:
 
 ```bash
-cd ~/AI_Project/BigData-Lab2-AdvancedMR-Spark
+cd ~/AI_Project/BigData-Lab03-AdvancedMR-Spark
 ```
 
 ### 1. Khởi động Hadoop
