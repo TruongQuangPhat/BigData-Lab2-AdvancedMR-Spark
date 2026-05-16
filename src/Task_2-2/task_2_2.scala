@@ -115,25 +115,51 @@ object Task22 {
           percentile_approx(col("promo_count"), lit(0.90), lit(10000)).as("p90")
         )
 
-    // Cách 2 (Exact): Window percent_rank()
-    //   - partitionBy(SKU, Month) → Spark shuffle tất cả hàng cùng nhóm
-    //     về cùng 1 executor (đảm bảo tính đúng thứ hạng)
-    //   - orderBy(promo_count) → sắp xếp tăng dần trong mỗi partition
-    //   - percent_rank() = (rank - 1) / (N - 1)  (0.0 → 1.0)
-    //   - Ngưỡng P80 = min(promo_count) với percent_rank >= 0.80
+    // Cách 2 (Exact): tự tính percentile bằng DataFrame/Window
+    //   - Đầu tiên gom tần suất promo_count trong từng nhóm (SKU, Month)
+    //       groupBy(SKU, Month, promo_count) → freq
+    //   - Sau đó sắp xếp promo_count tăng dần trong từng nhóm và tính cumulative count:
+    //       cum_freq = tổng freq từ promo_count nhỏ nhất đến promo_count hiện tại
+    //   - Tổng số đơn của nhóm:
+    //       n = tổng freq trong partition (SKU, Month)
+    //   - Vị trí percentile exact theo nearest-rank:
+    //       rank_p80 = ceil(n * 0.80)
+    //       rank_p90 = ceil(n * 0.90)
+    //   - Ngưỡng P80/P90 là promo_count nhỏ nhất sao cho:
+    //       cum_freq >= rank_p80 / rank_p90
     val windowSpec = Window
       .partitionBy("SKU", "Month")
       .orderBy("promo_count")
 
     def computeExact(): DataFrame = {
-      val ranked = orders.withColumn("prank", percent_rank().over(windowSpec))
-      ranked
+      val counts = orders
+        .groupBy("SKU", "Month", "promo_count")
+        .agg(count(lit(1)).as("freq"))
+
+      val cdfWindow = Window
+        .partitionBy("SKU", "Month")
+        .orderBy("promo_count")
+        .rowsBetween(Window.unboundedPreceding, Window.currentRow)
+
+      val groupWindow = Window.partitionBy("SKU", "Month")
+
+      val cdf = counts
+        .withColumn("cum_freq", sum(col("freq")).over(cdfWindow))
+        .withColumn("n", sum(col("freq")).over(groupWindow))
+        .withColumn("rank_p80", ceil(col("n") * lit(0.80)))
+        .withColumn("rank_p90", ceil(col("n") * lit(0.90)))
+
+      val p80 = cdf
+        .filter(col("cum_freq") >= col("rank_p80"))
         .groupBy("SKU", "Month")
-        .agg(
-          // Dùng coalesce với max() để tránh null khi N=1 (vì khi N=1, prank luôn là 0.0)
-          coalesce(min(when(col("prank") >= 0.80, col("promo_count"))), max(col("promo_count"))).as("p80"),
-          coalesce(min(when(col("prank") >= 0.90, col("promo_count"))), max(col("promo_count"))).as("p90")
-        )
+        .agg(min(col("promo_count")).as("p80"))
+
+      val p90 = cdf
+        .filter(col("cum_freq") >= col("rank_p90"))
+        .groupBy("SKU", "Month")
+        .agg(min(col("promo_count")).as("p90"))
+
+      p80.join(p90, Seq("SKU", "Month"), "inner")
     }
 
     // STEP 3 — Benchmark: chạy mỗi cách 5 lần, đo mean & stddev (ms)
