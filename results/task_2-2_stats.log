@@ -1,69 +1,69 @@
-26/05/16 14:24:43 WARN Utils: Your hostname, Cyhapun resolves to a loopback address: 127.0.1.1; using 10.255.255.254 instead (on interface lo)
-26/05/16 14:24:43 WARN Utils: Set SPARK_LOCAL_IP if you need to bind to another address
-26/05/16 14:24:43 INFO SparkContext: Running Spark version 3.5.1
-26/05/16 14:24:43 INFO SparkContext: OS info Linux, 6.6.87.2-microsoft-standard-WSL2, amd64
-26/05/16 14:24:43 INFO SparkContext: Java version 1.8.0_482
-26/05/16 14:24:43 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
-26/05/16 14:24:43 INFO ResourceUtils: ==============================================================
-26/05/16 14:24:43 INFO ResourceUtils: No custom resources configured for spark.driver.
-26/05/16 14:24:43 INFO ResourceUtils: ==============================================================
-26/05/16 14:24:43 INFO SparkContext: Submitted application: Task_2_2_StdDev_DynamicPercentile
-26/05/16 14:24:43 INFO ResourceProfile: Default ResourceProfile created, executor resources: Map(cores -> name: cores, amount: 1, script: , vendor: , memory -> name: memory, amount: 1024, script: , vendor: , offHeap -> name: offHeap, amount: 0, script: , vendor: ), task resources: Map(cpus -> name: cpus, amount: 1.0)
-26/05/16 14:24:43 INFO ResourceProfile: Limiting resource is cpu
-26/05/16 14:24:43 INFO ResourceProfileManager: Added ResourceProfile id: 0
-26/05/16 14:24:43 INFO SecurityManager: Changing view acls to: phuc
-26/05/16 14:24:43 INFO SecurityManager: Changing modify acls to: phuc
-26/05/16 14:24:43 INFO SecurityManager: Changing view acls groups to: 
-26/05/16 14:24:43 INFO SecurityManager: Changing modify acls groups to: 
-26/05/16 14:24:43 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: phuc; groups with view permissions: EMPTY; users with modify permissions: phuc; groups with modify permissions: EMPTY
-26/05/16 14:24:44 INFO Utils: Successfully started service 'sparkDriver' on port 43921.
-26/05/16 14:24:44 INFO SparkEnv: Registering MapOutputTracker
-26/05/16 14:24:44 INFO SparkEnv: Registering BlockManagerMaster
-26/05/16 14:24:44 INFO BlockManagerMasterEndpoint: Using org.apache.spark.storage.DefaultTopologyMapper for getting topology information
-26/05/16 14:24:44 INFO BlockManagerMasterEndpoint: BlockManagerMasterEndpoint up
-26/05/16 14:24:44 INFO SparkEnv: Registering BlockManagerMasterHeartbeat
-26/05/16 14:24:44 INFO DiskBlockManager: Created local directory at /tmp/blockmgr-789145cd-4a74-41c0-81a5-519ddb59d4ef
-26/05/16 14:24:44 INFO MemoryStore: MemoryStore started with capacity 366.3 MiB
-26/05/16 14:24:44 INFO SparkEnv: Registering OutputCommitCoordinator
-26/05/16 14:24:44 INFO JettyUtils: Start Jetty 0.0.0.0:4040 for SparkUI
-26/05/16 14:24:44 INFO Utils: Successfully started service 'SparkUI' on port 4040.
-26/05/16 14:24:44 INFO SparkContext: Added JAR file:/mnt/d/Schools/BigData/Lab03/BigData-Lab2-AdvancedMR-Spark/src/Task_2-2/Task_2_2.jar at spark://10.255.255.254:43921/jars/Task_2_2.jar with timestamp 1778941483729
-26/05/16 14:24:44 INFO Executor: Starting executor ID driver on host 10.255.255.254
-26/05/16 14:24:44 INFO Executor: OS info Linux, 6.6.87.2-microsoft-standard-WSL2, amd64
-26/05/16 14:24:44 INFO Executor: Java version 1.8.0_482
-26/05/16 14:24:44 INFO Executor: Starting executor with user classpath (userClassPathFirst = false): ''
-26/05/16 14:24:44 INFO Executor: Created or updated repl class loader org.apache.spark.util.MutableURLClassLoader@f2ce6b for default.
-26/05/16 14:24:44 INFO Executor: Fetching spark://10.255.255.254:43921/jars/Task_2_2.jar with timestamp 1778941483729
-26/05/16 14:24:44 INFO TransportClientFactory: Successfully created connection to /10.255.255.254:43921 after 33 ms (0 ms spent in bootstraps)
-26/05/16 14:24:44 INFO Utils: Fetching spark://10.255.255.254:43921/jars/Task_2_2.jar to /tmp/spark-7d555ed3-c6b4-4fdb-b6e4-fe02161236b8/userFiles-1149b5f9-cfbd-4236-8cf3-ceb71e96c01e/fetchFileTemp6273128180795090988.tmp
-26/05/16 14:24:44 INFO Executor: Adding file:/tmp/spark-7d555ed3-c6b4-4fdb-b6e4-fe02161236b8/userFiles-1149b5f9-cfbd-4236-8cf3-ceb71e96c01e/Task_2_2.jar to class loader default
-26/05/16 14:24:44 INFO Utils: Successfully started service 'org.apache.spark.network.netty.NettyBlockTransferService' on port 42649.
-26/05/16 14:24:44 INFO NettyBlockTransferService: Server created on 10.255.255.254:42649
-26/05/16 14:24:44 INFO BlockManager: Using org.apache.spark.storage.RandomBlockReplicationPolicy for block replication policy
-26/05/16 14:24:44 INFO BlockManagerMaster: Registering BlockManager BlockManagerId(driver, 10.255.255.254, 42649, None)
-26/05/16 14:24:44 INFO BlockManagerMasterEndpoint: Registering block manager 10.255.255.254:42649 with 366.3 MiB RAM, BlockManagerId(driver, 10.255.255.254, 42649, None)
-26/05/16 14:24:44 INFO BlockManagerMaster: Registered BlockManager BlockManagerId(driver, 10.255.255.254, 42649, None)
-26/05/16 14:24:44 INFO BlockManager: Initialized BlockManager: BlockManagerId(driver, 10.255.255.254, 42649, None)
+26/05/16 14:30:29 WARN Utils: Your hostname, Cyhapun resolves to a loopback address: 127.0.1.1; using 10.255.255.254 instead (on interface lo)
+26/05/16 14:30:29 WARN Utils: Set SPARK_LOCAL_IP if you need to bind to another address
+26/05/16 14:30:29 INFO SparkContext: Running Spark version 3.5.1
+26/05/16 14:30:29 INFO SparkContext: OS info Linux, 6.6.87.2-microsoft-standard-WSL2, amd64
+26/05/16 14:30:29 INFO SparkContext: Java version 1.8.0_482
+26/05/16 14:30:29 WARN NativeCodeLoader: Unable to load native-hadoop library for your platform... using builtin-java classes where applicable
+26/05/16 14:30:29 INFO ResourceUtils: ==============================================================
+26/05/16 14:30:29 INFO ResourceUtils: No custom resources configured for spark.driver.
+26/05/16 14:30:29 INFO ResourceUtils: ==============================================================
+26/05/16 14:30:29 INFO SparkContext: Submitted application: Task_2_2_StdDev_DynamicPercentile
+26/05/16 14:30:29 INFO ResourceProfile: Default ResourceProfile created, executor resources: Map(cores -> name: cores, amount: 1, script: , vendor: , memory -> name: memory, amount: 1024, script: , vendor: , offHeap -> name: offHeap, amount: 0, script: , vendor: ), task resources: Map(cpus -> name: cpus, amount: 1.0)
+26/05/16 14:30:29 INFO ResourceProfile: Limiting resource is cpu
+26/05/16 14:30:29 INFO ResourceProfileManager: Added ResourceProfile id: 0
+26/05/16 14:30:29 INFO SecurityManager: Changing view acls to: phuc
+26/05/16 14:30:29 INFO SecurityManager: Changing modify acls to: phuc
+26/05/16 14:30:29 INFO SecurityManager: Changing view acls groups to: 
+26/05/16 14:30:29 INFO SecurityManager: Changing modify acls groups to: 
+26/05/16 14:30:29 INFO SecurityManager: SecurityManager: authentication disabled; ui acls disabled; users with view permissions: phuc; groups with view permissions: EMPTY; users with modify permissions: phuc; groups with modify permissions: EMPTY
+26/05/16 14:30:30 INFO Utils: Successfully started service 'sparkDriver' on port 46383.
+26/05/16 14:30:30 INFO SparkEnv: Registering MapOutputTracker
+26/05/16 14:30:30 INFO SparkEnv: Registering BlockManagerMaster
+26/05/16 14:30:30 INFO BlockManagerMasterEndpoint: Using org.apache.spark.storage.DefaultTopologyMapper for getting topology information
+26/05/16 14:30:30 INFO BlockManagerMasterEndpoint: BlockManagerMasterEndpoint up
+26/05/16 14:30:30 INFO SparkEnv: Registering BlockManagerMasterHeartbeat
+26/05/16 14:30:30 INFO DiskBlockManager: Created local directory at /tmp/blockmgr-3b5ac403-5075-4313-975a-67de571986fb
+26/05/16 14:30:30 INFO MemoryStore: MemoryStore started with capacity 366.3 MiB
+26/05/16 14:30:30 INFO SparkEnv: Registering OutputCommitCoordinator
+26/05/16 14:30:30 INFO JettyUtils: Start Jetty 0.0.0.0:4040 for SparkUI
+26/05/16 14:30:30 INFO Utils: Successfully started service 'SparkUI' on port 4040.
+26/05/16 14:30:30 INFO SparkContext: Added JAR file:/mnt/d/Schools/BigData/Lab03/BigData-Lab2-AdvancedMR-Spark/src/Task_2-2/Task_2_2.jar at spark://10.255.255.254:46383/jars/Task_2_2.jar with timestamp 1778941829785
+26/05/16 14:30:30 INFO Executor: Starting executor ID driver on host 10.255.255.254
+26/05/16 14:30:30 INFO Executor: OS info Linux, 6.6.87.2-microsoft-standard-WSL2, amd64
+26/05/16 14:30:30 INFO Executor: Java version 1.8.0_482
+26/05/16 14:30:30 INFO Executor: Starting executor with user classpath (userClassPathFirst = false): ''
+26/05/16 14:30:30 INFO Executor: Created or updated repl class loader org.apache.spark.util.MutableURLClassLoader@f2ce6b for default.
+26/05/16 14:30:30 INFO Executor: Fetching spark://10.255.255.254:46383/jars/Task_2_2.jar with timestamp 1778941829785
+26/05/16 14:30:30 INFO TransportClientFactory: Successfully created connection to /10.255.255.254:46383 after 29 ms (0 ms spent in bootstraps)
+26/05/16 14:30:30 INFO Utils: Fetching spark://10.255.255.254:46383/jars/Task_2_2.jar to /tmp/spark-93f95637-0692-41c3-9983-1d1f53281e02/userFiles-6b649f2b-c8b3-4367-ad96-9c4bf8b713f0/fetchFileTemp8830343035106252979.tmp
+26/05/16 14:30:30 INFO Executor: Adding file:/tmp/spark-93f95637-0692-41c3-9983-1d1f53281e02/userFiles-6b649f2b-c8b3-4367-ad96-9c4bf8b713f0/Task_2_2.jar to class loader default
+26/05/16 14:30:30 INFO Utils: Successfully started service 'org.apache.spark.network.netty.NettyBlockTransferService' on port 44011.
+26/05/16 14:30:30 INFO NettyBlockTransferService: Server created on 10.255.255.254:44011
+26/05/16 14:30:30 INFO BlockManager: Using org.apache.spark.storage.RandomBlockReplicationPolicy for block replication policy
+26/05/16 14:30:30 INFO BlockManagerMaster: Registering BlockManager BlockManagerId(driver, 10.255.255.254, 44011, None)
+26/05/16 14:30:30 INFO BlockManagerMasterEndpoint: Registering block manager 10.255.255.254:44011 with 366.3 MiB RAM, BlockManagerId(driver, 10.255.255.254, 44011, None)
+26/05/16 14:30:30 INFO BlockManagerMaster: Registered BlockManager BlockManagerId(driver, 10.255.255.254, 44011, None)
+26/05/16 14:30:30 INFO BlockManager: Initialized BlockManager: BlockManagerId(driver, 10.255.255.254, 44011, None)
 TASK 2.2.2  -  Dynamic-Percentile Population Std Dev
 
 [STEP 1] Loading and preparing data...
    Usable orders after filtering: 121180
 
 [STEP 3] Benchmarking (5 runs each)...
-   [approx] Run 1: 2069ms
-   [approx] Run 2: 1347ms
-   [approx] Run 3: 1319ms
-   [approx] Run 4: 1260ms
-   [approx] Run 5: 1098ms
-   [exact]  Run 1: 2079ms
-   [exact]  Run 2: 1561ms
-   [exact]  Run 3: 1326ms
-   [exact]  Run 4: 1193ms
-   [exact]  Run 5: 1035ms
+   [approx] Run 1: 2156ms
+   [approx] Run 2: 1807ms
+   [approx] Run 3: 1516ms
+   [approx] Run 4: 1322ms
+   [approx] Run 5: 1147ms
+   [exact]  Run 1: 2106ms
+   [exact]  Run 2: 1477ms
+   [exact]  Run 3: 1663ms
+   [exact]  Run 4: 1249ms
+   [exact]  Run 5: 1232ms
 
   Method                  Mean(ms)   Std(ms)
-  Approach 1 (approx)       1418.6      336.5
-  Approach 2 (exact)        1438.8      363.6
+  Approach 1 (approx)       1589.6      358.0
+  Approach 2 (exact)        1545.4      322.1
 
 [STEP 4] Computing population stddev per SKU-Month group...
 
@@ -101,21 +101,21 @@ only showing top 5 rows
 only showing top 5 rows
 
 
-   Groups (P80) with different eligible order counts: 2948
-+----------------+-----+------------+-----------+
-|SKU             |Month|count_approx|count_exact|
-+----------------+-----+------------+-----------+
-|MEN5001-KR-XL   |4    |3           |1          |
-|JNE3618-KR-S    |4    |4           |3          |
-|NW012-TP-PJ-XL  |4    |2           |1          |
-|SET405-KR-NP-XS |4    |3           |1          |
-|SET320-KR-NP-XXL|4    |13          |2          |
-|SET304-KR-DPT-XS|4    |27          |4          |
-|J0331-KR-XXXL   |4    |5           |1          |
-|J0117-TP-XXL    |4    |4           |2          |
-|J0339-DR-XL     |4    |15          |10         |
-|J0328-KR-L      |4    |3           |1          |
-+----------------+-----+------------+-----------+
+   Groups (P80) with different eligible order counts / stddev: 2948
++----------------+-----+------------+-----------+------------------+------------+
+|SKU             |Month|count_approx|count_exact|stddev_approx     |stddev_exact|
++----------------+-----+------------+-----------+------------------+------------+
+|MEN5001-KR-XL   |4    |3           |1          |0.0               |0.0         |
+|JNE3618-KR-S    |4    |4           |3          |0.0               |0.0         |
+|NW012-TP-PJ-XL  |4    |2           |1          |0.0               |0.0         |
+|SET405-KR-NP-XS |4    |3           |1          |0.0               |0.0         |
+|SET320-KR-NP-XXL|4    |13          |2          |23.623526534308123|27.5        |
+|SET304-KR-DPT-XS|4    |27          |4          |14.10104627936663 |0.0         |
+|J0331-KR-XXXL   |4    |5           |1          |4.0               |0.0         |
+|J0117-TP-XXL    |4    |4           |2          |0.0               |0.0         |
+|J0339-DR-XL     |4    |15          |10         |72.0892656518446  |86.7        |
+|J0328-KR-L      |4    |3           |1          |0.0               |0.0         |
++----------------+-----+------------+-----------+------------------+------------+
 only showing top 10 rows
 
 

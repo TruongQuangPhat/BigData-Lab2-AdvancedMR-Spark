@@ -224,24 +224,70 @@ object Task22 {
         .withColumn("percentile_level", lit(levelLabel))
     }
 
-    // Tính cho P80 và P90 (dùng kết quả exact làm ngưỡng chính thức)
-    val resultP80 = buildResult(thresholdsExact, "p80", "P80")
-    val resultP90 = buildResult(thresholdsExact, "p90", "P90")
+    // Tính kết quả cho cả 2 phương pháp Exact và Approx
+    val resultP80_exact = buildResult(thresholdsExact, "p80", "P80")
+    val resultP90_exact = buildResult(thresholdsExact, "p90", "P90")
 
-    // STEP 5 — Gộp P80 + P90 thành 1 DataFrame, xuất PARQUET trực tiếp lên HDFS
+    val resultP80_approx = buildResult(thresholdsApprox, "p80", "P80")
+    val resultP90_approx = buildResult(thresholdsApprox, "p90", "P90")
+
+    // Bảng tổng số đơn
+    val totalOrdersDF = orders
+      .groupBy("SKU", "Month")
+      .agg(count("Order_ID").as("total_orders"))
+
+    // Đổi tên các bảng Thresholds
+    val threshApprox = thresholdsApprox
+      .withColumnRenamed("p80", "threshold_p80_approx")
+      .withColumnRenamed("p90", "threshold_p90_approx")
+    
+    val threshExact = thresholdsExact
+      .withColumnRenamed("p80", "threshold_p80_exact")
+      .withColumnRenamed("p90", "threshold_p90_exact")
+
+    // Đổi tên các bảng Result
+    val resP80Approx = resultP80_approx
+      .withColumnRenamed("stddev_amount", "stddev_p80_approx")
+      .withColumnRenamed("order_count", "orders_p80_approx")
+      .drop("percentile_level")
+
+    val resP90Approx = resultP90_approx
+      .withColumnRenamed("stddev_amount", "stddev_p90_approx")
+      .withColumnRenamed("order_count", "orders_p90_approx")
+      .drop("percentile_level")
+
+    val resP80Exact = resultP80_exact
+      .withColumnRenamed("stddev_amount", "stddev_p80_exact")
+      .withColumnRenamed("order_count", "orders_p80_exact")
+      .drop("percentile_level")
+
+    val resP90Exact = resultP90_exact
+      .withColumnRenamed("stddev_amount", "stddev_p90_exact")
+      .withColumnRenamed("order_count", "orders_p90_exact")
+      .drop("percentile_level")
+
+    // STEP 5 — Gộp tất cả thành 1 DataFrame siêu chi tiết (Wide format)
     println("\n[STEP 5] Merging results and writing Parquet to HDFS...")
 
-    val finalDF = resultP80
-      .withColumnRenamed("stddev_amount", "stddev_p80")
-      .withColumnRenamed("order_count", "count_p80")
-      .drop("percentile_level")
-      .join(
-        resultP90
-          .withColumnRenamed("stddev_amount", "stddev_p90")
-          .withColumnRenamed("order_count", "count_p90")
-          .drop("percentile_level"),
-        Seq("SKU", "Month"),
-        "inner"
+    val joinCols = Seq("SKU", "Month")
+
+    val finalDF = totalOrdersDF
+      .join(threshApprox, joinCols, "inner")
+      .join(threshExact, joinCols, "inner")
+      .join(resP80Approx, joinCols, "left")
+      .join(resP90Approx, joinCols, "left")
+      .join(resP80Exact, joinCols, "left")
+      .join(resP90Exact, joinCols, "left")
+      .na.fill(0.0, Seq("stddev_p80_approx", "stddev_p90_approx", "stddev_p80_exact", "stddev_p90_exact"))
+      .na.fill(0, Seq("orders_p80_approx", "orders_p90_approx", "orders_p80_exact", "orders_p90_exact"))
+      .select(
+        "SKU", "Month", "total_orders",
+        "threshold_p80_approx", "threshold_p90_approx",
+        "orders_p80_approx", "orders_p90_approx",
+        "stddev_p80_approx", "stddev_p90_approx",
+        "threshold_p80_exact", "threshold_p90_exact",
+        "orders_p80_exact", "orders_p90_exact",
+        "stddev_p80_exact", "stddev_p90_exact"
       )
 
     // Lưu ra thư mục staging tạm
@@ -325,13 +371,13 @@ object Task22 {
     }
 
     // Nhóm nào có tập đơn hàng hợp lệ hoặc độ lệch chuẩn khác nhau?
-    val p80Approx = buildResult(thresholdsApprox, "p80", "P80")
+    val p80ApproxLog = resultP80_approx
       .select(col("SKU"), col("Month"), col("order_count").as("count_approx"), col("stddev_amount").as("stddev_approx"))
-    val p80Exact  = resultP80
+    val p80ExactLog  = resultP80_exact
       .select(col("SKU"), col("Month"), col("order_count").as("count_exact"), col("stddev_amount").as("stddev_exact"))
 
-    val orderDiff = p80Approx
-      .join(p80Exact, Seq("SKU", "Month"), "inner")
+    val orderDiff = p80ApproxLog
+      .join(p80ExactLog, Seq("SKU", "Month"), "inner")
       .filter(col("count_approx") =!= col("count_exact") || round(col("stddev_approx"), 4) =!= round(col("stddev_exact"), 4))
 
     val nOrderDiff = orderDiff.count()
