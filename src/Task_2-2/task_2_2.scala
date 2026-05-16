@@ -232,13 +232,16 @@ object Task22 {
     println("\n[STEP 5] Merging results and writing Parquet to HDFS...")
 
     val finalDF = resultP80
-      .unionByName(resultP90)
-      .select(
-        col("SKU"),
-        col("Month"),
-        col("percentile_level"),
-        col("order_count"),
-        col("stddev_amount")
+      .withColumnRenamed("stddev_amount", "stddev_p80")
+      .withColumnRenamed("order_count", "count_p80")
+      .drop("percentile_level")
+      .join(
+        resultP90
+          .withColumnRenamed("stddev_amount", "stddev_p90")
+          .withColumnRenamed("order_count", "count_p90")
+          .drop("percentile_level"),
+        Seq("SKU", "Month"),
+        "inner"
       )
 
     // Lưu ra thư mục staging tạm
@@ -321,19 +324,23 @@ object Task22 {
         .show(5, truncate = false)
     }
 
-    // Nhóm nào có tập đơn hàng hợp lệ khác nhau?
+    // Nhóm nào có tập đơn hàng hợp lệ hoặc độ lệch chuẩn khác nhau?
     val p80Approx = buildResult(thresholdsApprox, "p80", "P80")
-      .select(col("SKU"), col("Month"), col("order_count").as("count_approx"))
+      .select(col("SKU"), col("Month"), col("order_count").as("count_approx"), col("stddev_amount").as("stddev_approx"))
     val p80Exact  = resultP80
-      .select(col("SKU"), col("Month"), col("order_count").as("count_exact"))
+      .select(col("SKU"), col("Month"), col("order_count").as("count_exact"), col("stddev_amount").as("stddev_exact"))
 
     val orderDiff = p80Approx
       .join(p80Exact, Seq("SKU", "Month"), "inner")
-      .filter(col("count_approx") =!= col("count_exact"))
+      .filter(col("count_approx") =!= col("count_exact") || round(col("stddev_approx"), 4) =!= round(col("stddev_exact"), 4))
 
     val nOrderDiff = orderDiff.count()
-    println(s"\n   Groups (P80) with different eligible order counts: $nOrderDiff")
-    if (nOrderDiff > 0) orderDiff.show(10, truncate = false)
+    println(s"\n   Groups (P80) with different eligible order counts / stddev: $nOrderDiff")
+    if (nOrderDiff > 0) {
+      orderDiff
+        .select("SKU", "Month", "count_approx", "count_exact", "stddev_approx", "stddev_exact")
+        .show(10, truncate = false)
+    }
 
     // Có nhóm nào > 1,000 đơn không?
     val largeGroups = orders
