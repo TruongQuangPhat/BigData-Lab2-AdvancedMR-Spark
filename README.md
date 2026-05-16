@@ -1,19 +1,60 @@
 # LAB 03 - ADVANCED MAPREDUCE PROBLEMS
 
-## Hướng dẫn Build và Chạy
+## Hướng dẫn Build, Chạy và Benchmark
 
-### YÊU CẦU HỆ THỐNG
+README này hướng dẫn cách chuẩn bị môi trường, chạy hai bài MapReduce hiện tại của Lab 03 và đo thời gian thực thi phục vụ phần benchmark trong báo cáo.
 
-- Hadoop 3.x (Pseudo-distributed mode)
+Phạm vi hiện tại:
+
+- `Task_1-1`: Sliding Window
+- `Task_1-2`: Median Variety
+
+Các task Spark còn lại có thể được bổ sung vào script và README sau khi nhóm hoàn thiện phần triển khai tương ứng.
+
+## YÊU CẦU HỆ THỐNG
+
+- Hadoop 3.x ở chế độ pseudo-distributed mode
 - Scala 2.12.x hoặc 2.13.x
-- Java 8 hoặc 11
-- Môi trường Linux / WSL (Windows Subsystem for Linux)
+- Java 8 hoặc Java 11
+- Môi trường Linux hoặc WSL
+- Python 3 để xử lý thống kê benchmark và ghi log JSON
+
+## CẤU TRÚC THƯ MỤC QUAN TRỌNG
+
+```text
+BigData-Lab03-AdvancedMR-Spark/
+├── data/
+│   └── Amazon_Sale_Report.csv
+├── results/
+│   ├── Task_1-1.csv
+│   └── Task_1-2.csv
+├── logs/
+│   ├── Task_1-1.json
+│   └── Task_1-2.json
+├── src/
+│   ├── Task_1-1/
+│   │   └── task1_1.scala
+│   └── Task_1-2/
+│       └── task1_2.scala
+├── build_and_run_all.sh
+├── benchmark_all.sh
+└── README.md
+```
+
+Trong đó:
+
+- `data/` chứa dữ liệu đầu vào local.
+- `src/` chứa mã nguồn Scala.
+- `results/` chứa các file kết quả cuối cùng dùng để nộp bài.
+- `logs/` chứa log benchmark phục vụ báo cáo.
+- `build_and_run_all.sh` dùng để build và chạy các task MapReduce.
+- `benchmark_all.sh` dùng để đo thời gian thực thi của các task MapReduce.
 
 ## CHUẨN BỊ MÔI TRƯỜNG VÀ DỮ LIỆU TRÊN HDFS
 
 Tất cả các lệnh dưới đây được thực thi tại thư mục gốc của dự án.
 
-Đảm bảo bạn đang đứng tại thư mục gốc trước khi bắt đầu:
+Trước tiên, di chuyển vào project root:
 
 ```bash
 cd ~/AI_Project/BigData-Lab03-AdvancedMR-Spark
@@ -28,10 +69,17 @@ start-yarn.sh
 
 ### 2. Kiểm tra các tiến trình Hadoop
 
-Đảm bảo có các tiến trình như `NameNode`, `DataNode`, `NodeManager`, `ResourceManager`:
-
 ```bash
 jps
+```
+
+Cần bảo đảm các tiến trình chính đã chạy, ví dụ:
+
+```text
+NameNode
+DataNode
+ResourceManager
+NodeManager
 ```
 
 ### 3. Tạo thư mục input trên HDFS và tải dữ liệu lên
@@ -41,12 +89,16 @@ hadoop fs -mkdir -p /lab03/input/
 hadoop fs -put -f data/Amazon_Sale_Report.csv /lab03/input/
 ```
 
-### 4. Tạo thư mục kết quả local
-
-Các file CSV cuối cùng sẽ được lưu trong thư mục `results/` tại project root:
+Kiểm tra dữ liệu trên HDFS:
 
 ```bash
-mkdir -p results
+hadoop fs -ls /lab03/input/
+```
+
+### 4. Tạo thư mục output local
+
+```bash
+mkdir -p results logs
 ```
 
 ## TASK 1-1: SLIDING WINDOW
@@ -56,16 +108,23 @@ mkdir -p results
 - File source: `src/Task_1-1/task1_1.scala`
 - Package: `lab03`
 - Main class: `lab03.SlidingWindowJob`
+- Input HDFS: `/lab03/input/Amazon_Sale_Report.csv`
+- Output HDFS: `/lab03/output/task1-1`
 - Output local cuối cùng: `results/Task_1-1.csv`
 
-### 1. Di chuyển vào thư mục mã nguồn và thiết lập môi trường
+### 1. Di chuyển vào thư mục mã nguồn
 
 ```bash
 cd src/Task_1-1
+```
+
+### 2. Thiết lập classpath Hadoop và Scala
+
+```bash
 export HADOOP_CLASSPATH=$(hadoop classpath):/usr/share/scala/lib/scala-library.jar
 ```
 
-### 2. Biên dịch và đóng gói thành file JAR
+### 3. Biên dịch và đóng gói JAR
 
 ```bash
 mkdir -p classes
@@ -76,7 +135,7 @@ scalac -classpath "$HADOOP_CLASSPATH" -d classes task1_1.scala
 jar -cvf SlidingWindowJob.jar -C classes .
 ```
 
-### 3. Chạy Job trên Hadoop
+### 4. Chạy Hadoop MapReduce job
 
 ```bash
 hadoop jar SlidingWindowJob.jar lab03.SlidingWindowJob \
@@ -84,9 +143,9 @@ hadoop jar SlidingWindowJob.jar lab03.SlidingWindowJob \
   /lab03/output/task1-1
 ```
 
-### 4. Lấy kết quả từ HDFS về thư mục `results/`
+### 5. Lấy kết quả từ HDFS về thư mục `results/`
 
-Hadoop MapReduce ghi output ra thư mục HDFS, thường gồm các file `part-r-*`. Vì yêu cầu nộp là một file `.csv` duy nhất, ta dùng `getmerge` để gộp kết quả về local.
+Hadoop MapReduce ghi output ra thư mục HDFS, thường gồm các file `part-r-*`. Vì yêu cầu nộp là một file `.csv` duy nhất, cần dùng `getmerge` để gộp kết quả về local.
 
 ```bash
 mkdir -p ../../results
@@ -96,7 +155,7 @@ hadoop fs -getmerge /lab03/output/task1-1 ../../results/Task_1-1.csv
 sed -i '2,${/^State,TargetDate/d}' ../../results/Task_1-1.csv
 ```
 
-### 5. Quay lại thư mục gốc
+### 6. Quay lại thư mục gốc
 
 ```bash
 cd ../..
@@ -109,18 +168,26 @@ cd ../..
 - File source: `src/Task_1-2/task1_2.scala`
 - Package: `lab03`
 - Main class: `lab03.MedianVarietyJob`
+- Input HDFS: `/lab03/input/Amazon_Sale_Report.csv`
+- Temp output HDFS: `/lab03/output/task1-2-temp`
+- Final output HDFS: `/lab03/output/task1-2`
 - Output local cuối cùng: `results/Task_1-2.csv`
 
-Lưu ý: Task này sử dụng kỹ thuật Job Chaining, gồm 2 MapReduce jobs chạy nối tiếp nhau.
+Task này sử dụng kỹ thuật job chaining, gồm hai MapReduce jobs chạy nối tiếp nhau.
 
-### 1. Di chuyển vào thư mục mã nguồn và thiết lập môi trường
+### 1. Di chuyển vào thư mục mã nguồn
 
 ```bash
 cd src/Task_1-2
+```
+
+### 2. Thiết lập classpath Hadoop và Scala
+
+```bash
 export HADOOP_CLASSPATH=$(hadoop classpath):/usr/share/scala/lib/scala-library.jar
 ```
 
-### 2. Biên dịch và đóng gói thành file JAR
+### 3. Biên dịch và đóng gói JAR
 
 ```bash
 mkdir -p classes
@@ -131,9 +198,9 @@ scalac -classpath "$HADOOP_CLASSPATH" -d classes task1_2.scala
 jar -cvf MedianVarietyJob.jar -C classes .
 ```
 
-### 3. Chạy Job trên Hadoop
+### 4. Chạy Hadoop MapReduce job
 
-Task 1-2 cần truyền đủ 3 tham số:
+Task 1-2 cần truyền đủ ba tham số:
 
 1. Input path trên HDFS
 2. Temp output path cho Job 1
@@ -146,7 +213,7 @@ hadoop jar MedianVarietyJob.jar lab03.MedianVarietyJob \
   /lab03/output/task1-2
 ```
 
-### 4. Lấy kết quả từ HDFS về thư mục `results/`
+### 5. Lấy kết quả từ HDFS về thư mục `results/`
 
 ```bash
 mkdir -p ../../results
@@ -156,7 +223,7 @@ hadoop fs -getmerge /lab03/output/task1-2 ../../results/Task_1-2.csv
 sed -i '2,${/^Month,State/d}' ../../results/Task_1-2.csv
 ```
 
-### 5. Quay lại thư mục gốc
+### 6. Quay lại thư mục gốc
 
 ```bash
 cd ../..
@@ -171,7 +238,15 @@ results/Task_1-1.csv
 results/Task_1-2.csv
 ```
 
-### Task 1-1 Output Format: `Task_1-1.csv`
+Kiểm tra nhanh:
+
+```bash
+tree results
+head results/Task_1-1.csv
+head results/Task_1-2.csv
+```
+
+### Task 1-1 Output Format
 
 ```csv
 State,TargetDate,MostBoughtSize,Count
@@ -180,7 +255,7 @@ ANDHRA PRADESH,04-02-22,M,41
 ...
 ```
 
-### Task 1-2 Output Format: `Task_1-2.csv`
+### Task 1-2 Output Format
 
 ```csv
 Month,State,MedianVariety
@@ -191,93 +266,90 @@ Month,State,MedianVariety
 
 ## QUY TRÌNH TỰ ĐỘNG HÓA: BUILD & RUN ALL
 
-Dự án cung cấp script shell `build_and_run_all.sh` để tự động hóa toàn bộ quy trình:
+Dự án cung cấp script `build_and_run_all.sh` để tự động hóa quy trình chạy hai bài MapReduce hiện tại.
 
-1. Chuẩn bị HDFS input
-2. Biên dịch mã nguồn Scala
-3. Đóng gói JAR
-4. Chạy MapReduce trên Hadoop
-5. Trích xuất kết quả CSV cuối cùng về thư mục `results/`
+Script này thực hiện các bước:
 
-### Bước 1: Cấp quyền thực thi
+1. Chuẩn bị dữ liệu input trên HDFS.
+2. Biên dịch mã nguồn Scala.
+3. Đóng gói file JAR.
+4. Chạy Hadoop MapReduce job cho `Task_1-1` và `Task_1-2`.
+5. Trích xuất kết quả cuối cùng từ HDFS về thư mục `results/`.
 
-Chỉ cần chạy một lần:
+Các file kết quả sau khi chạy script:
+
+```text
+results/Task_1-1.csv
+results/Task_1-2.csv
+```
+
+### 1. Cấp quyền thực thi
+
+Chỉ cần thực hiện một lần:
 
 ```bash
 chmod +x build_and_run_all.sh
 ```
 
-### Bước 2: Thực thi script
+### 2. Chạy script
 
 ```bash
 ./build_and_run_all.sh
 ```
 
-### Nội dung đề xuất cho `build_and_run_all.sh`
+### 3. Kiểm tra kết quả
 
 ```bash
-#!/bin/bash
+tree results
+head results/Task_1-1.csv
+head results/Task_1-2.csv
+```
 
-set -e
+## QUY TRÌNH BENCHMARK
 
-echo "--- PREPARING HDFS ---"
+Dự án cung cấp script `benchmark_all.sh` để đo thời gian thực thi cho các bài MapReduce.
 
-mkdir -p results
+Ở phiên bản hiện tại, script benchmark hỗ trợ:
 
-hadoop fs -mkdir -p /lab03/input/
-hadoop fs -put -f data/Amazon_Sale_Report.csv /lab03/input/
+1. `Task_1-1`: Sliding Window
+2. `Task_1-2`: Median Variety
 
-export HADOOP_CLASSPATH=$(hadoop classpath):/usr/share/scala/lib/scala-library.jar
+Mỗi task được chạy 5 lần. Kết quả benchmark được lưu thành hai file log JSON riêng biệt:
 
-echo "--- BUILDING & RUNNING TASK 1-1 ---"
+```text
+logs/Task_1-1.json
+logs/Task_1-2.json
+```
 
-cd src/Task_1-1
+Các file log chứa:
 
-mkdir -p classes
-rm -rf classes/*
-rm -f SlidingWindowJob.jar
+- thời gian chạy từng lần;
+- thời gian trung bình;
+- độ lệch chuẩn;
+- thời gian nhỏ nhất;
+- thời gian lớn nhất;
+- thông tin main class và output path tương ứng.
 
-scalac -classpath "$HADOOP_CLASSPATH" -d classes task1_1.scala
-jar -cvf SlidingWindowJob.jar -C classes .
+Benchmark chỉ đo thời gian thực thi Hadoop MapReduce job chính. Các bước biên dịch Scala, đóng gói JAR, chuẩn bị input HDFS, `getmerge` kết quả về local và xử lý hậu kỳ file CSV không được tính vào thời gian benchmark.
 
-hadoop jar SlidingWindowJob.jar lab03.SlidingWindowJob \
-  /lab03/input/Amazon_Sale_Report.csv \
-  /lab03/output/task1-1
+### 1. Cấp quyền thực thi
 
-mkdir -p ../../results
-rm -f ../../results/Task_1-1.csv
+Chỉ cần thực hiện một lần:
 
-hadoop fs -getmerge /lab03/output/task1-1 ../../results/Task_1-1.csv
-sed -i '2,${/^State,TargetDate/d}' ../../results/Task_1-1.csv
+```bash
+chmod +x benchmark_all.sh
+```
 
-cd ../..
+### 2. Chạy benchmark
 
-echo "--- BUILDING & RUNNING TASK 1-2 ---"
+```bash
+./benchmark_all.sh
+```
 
-cd src/Task_1-2
+### 3. Kiểm tra file log benchmark
 
-mkdir -p classes
-rm -rf classes/*
-rm -f MedianVarietyJob.jar
-
-scalac -classpath "$HADOOP_CLASSPATH" -d classes task1_2.scala
-jar -cvf MedianVarietyJob.jar -C classes .
-
-hadoop jar MedianVarietyJob.jar lab03.MedianVarietyJob \
-  /lab03/input/Amazon_Sale_Report.csv \
-  /lab03/output/task1-2-temp \
-  /lab03/output/task1-2
-
-mkdir -p ../../results
-rm -f ../../results/Task_1-2.csv
-
-hadoop fs -getmerge /lab03/output/task1-2 ../../results/Task_1-2.csv
-sed -i '2,${/^Month,State/d}' ../../results/Task_1-2.csv
-
-cd ../..
-
-echo "HOÀN TẤT BUILD VÀ CHẠY TOÀN BỘ PROJECT!"
-echo "Kết quả được lưu tại:"
-echo "- results/Task_1-1.csv"
-echo "- results/Task_1-2.csv"
+```bash
+tree logs
+cat logs/Task_1-1.json
+cat logs/Task_1-2.json
 ```
