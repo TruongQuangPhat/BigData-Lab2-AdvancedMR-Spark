@@ -1,8 +1,7 @@
 import org.apache.spark.sql.{SparkSession, DataFrame}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Window
-import java.io.File
-import java.nio.file.{Files, Paths, StandardCopyOption}
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 /**
  * Task 2.2.2 — Population Standard Deviation with Dynamic Percentile Thresholds
@@ -47,12 +46,12 @@ object Task22 {
     import spark.implicits._
 
     // Đường dẫn — chỉnh thành HDFS path nếu chạy trên cluster
-    val DATA_PATH = "hdfs:///lab03/amazon.csv" 
+    val DATA_PATH = "/lab2/input/Amazon_Sale_Report.csv" 
     // Spark ghi parquet ra thư mục chứa part-*.parquet.
     // Ta dùng thư mục staging tạm, sau đó copy file part duy nhất
     // ra đúng tên file Task_2-2.parquet để đọc được ở local bình thường.
 
-    val OUTPUT_PATH = "hdfs:///lab03/output/Task_2-2.parquet"
+    val OUTPUT_PATH = "/lab2/output/Task_2-2.parquet"
 
     println("TASK 2.2.2  -  Dynamic-Percentile Population Std Dev")
 
@@ -131,8 +130,9 @@ object Task22 {
       ranked
         .groupBy("SKU", "Month")
         .agg(
-          min(when(col("prank") >= 0.80, col("promo_count"))).as("p80"),
-          min(when(col("prank") >= 0.90, col("promo_count"))).as("p90")
+          // Dùng coalesce với max() để tránh null khi N=1 (vì khi N=1, prank luôn là 0.0)
+          coalesce(min(when(col("prank") >= 0.80, col("promo_count"))), max(col("promo_count"))).as("p80"),
+          coalesce(min(when(col("prank") >= 0.90, col("promo_count"))), max(col("promo_count"))).as("p90")
         )
     }
 
@@ -241,15 +241,34 @@ object Task22 {
         col("stddev_amount")
       )
 
-    // Ghi trực tiếp ra thư mục đích trên HDFS
-    // repartition(1) vẫn giữ lại để đảm bảo chỉ có 1 file dữ liệu bên trong thư mục
+    // Lưu ra thư mục staging tạm
+    val STAGING_PATH = OUTPUT_PATH + "_staging"
     finalDF
       .repartition(1)
       .write
       .mode("overwrite")
-      .parquet(OUTPUT_PATH)
+      .parquet(STAGING_PATH)
 
-    println(s"   [OK] Data saved to HDFS directory: $OUTPUT_PATH")
+    // Dùng Hadoop FileSystem API để copy file part-*.parquet thành file duy nhất đúng với yêu cầu
+    val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+    val stagingDir = new Path(STAGING_PATH)
+    val outputFile = new Path(OUTPUT_PATH)
+
+    if (fs.exists(outputFile)) {
+      fs.delete(outputFile, true)
+    }
+
+    val filesStatus = fs.listStatus(stagingDir)
+    val partFile = filesStatus.find(_.getPath.getName.startsWith("part-"))
+    
+    partFile.foreach { f =>
+      fs.rename(f.getPath, outputFile)
+    }
+
+    // Xoá thư mục staging
+    fs.delete(stagingDir, true)
+
+    println(s"   [OK] Data exported to single file: $OUTPUT_PATH")
 
     // STEP 6 — So sánh nhanh approx vs exact (phục vụ báo cáo)
     println("\n[STEP 6] Accuracy comparison: approx vs exact thresholds...")
