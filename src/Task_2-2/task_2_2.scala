@@ -4,92 +4,83 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 /**
- * Task 2.2.2 — Population Standard Deviation with Dynamic Percentile Thresholds
+ * Task 2.2 — Dynamic Percentile Thresholds & Population StdDev
  *
- * Yêu cầu:
- *   - Tính ngưỡng P80 / P90 của promo_count theo nhóm (SKU, Month) bằng 2 cách
- *   - Cách 1 (Approximate): percentile_approx / approx_percentile
- *   - Cách 2 (Exact):       Window percent_rank()
- *   - Benchmark 5 lần, tính mean & stddev thời gian chạy
- *   - Lọc đơn hàng >= ngưỡng → tính stddev_pop(Amount) mỗi nhóm
- *   - Nếu nhóm có < 2 đơn hợp lệ → stddev = 0
- *   - Gộp P80 và P90 thành 1 DataFrame → xuất Task_2-2.parquet (repartition(1))
+ * Yêu cầu chính:
+ *   - Với mỗi SKU trong mỗi tháng, tính stddev_pop(Amount) của các đơn hàng
+ *     có số promotion >= ngưỡng percentile động.
+ *   - Hai mức percentile: P80 và P90.
+ *   - Số promotion = số promotion identifiers gắn với order, bao gồm Amazon-issued promotions.
+ *   - Nếu nhóm sau lọc có < 2 đơn hợp lệ thì stddev = 0.
+ *   - Cài 2 cách tính percentile:
+ *       1. Approximate: percentile_approx / approx_percentile
+ *       2. Exact: tự cài bằng DataFrame/Window, dùng nearest-rank percentile
+ *   - Benchmark mỗi cách ít nhất 5 lần, báo cáo mean và stddev thời gian chạy.
+ *   - So sánh threshold approx vs exact và các nhóm có qualifying orders khác nhau.
+ *   - Kiểm tra nhóm SKU-month có > 1000 orders.
+ *   - Xuất kết quả cuối ra single Parquet file: Task_2-2.parquet
  */
 object Task22 {
 
-  // Helper: đo thời gian thực thi (ms) của một khối code
   def timeMs(block: => Unit): Long = {
     val t0 = System.currentTimeMillis()
     block
     System.currentTimeMillis() - t0
   }
 
-  // Helper: tính mean và population stddev của một dãy Long
   def meanStddev(samples: Seq[Long]): (Double, Double) = {
-    val n    = samples.length.toDouble
+    val n = samples.length.toDouble
     val mean = samples.sum / n
     val variance = samples.map(x => math.pow(x - mean, 2)).sum / n
     (mean, math.sqrt(variance))
   }
 
-  // Main
   def main(args: Array[String]): Unit = {
 
     val spark = SparkSession.builder()
-      .appName("Task_2_2_StdDev_DynamicPercentile")
-      // Xoá comment .master khi chạy local; bỏ dòng này khi submit lên YARN
-      // .master("local[*]")
+      .appName("Task_2_2_Dynamic_Percentile_StdDev")
       .config("spark.sql.shuffle.partitions", "200")
       .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")
     import spark.implicits._
 
-    // Đường dẫn — chỉnh thành HDFS path nếu chạy trên cluster
-    val DATA_PATH = "/lab2/input/Amazon_Sale_Report.csv" 
-    // Spark ghi parquet ra thư mục chứa part-*.parquet.
-    // Ta dùng thư mục staging tạm, sau đó copy file part duy nhất
-    // ra đúng tên file Task_2-2.parquet để đọc được ở local bình thường.
+    val DATA_PATH = if (args.length >= 1) args(0) else "/lab2/input/Amazon_Sale_Report.csv"
+    val OUTPUT_PATH = if (args.length >= 2) args(1) else "/lab2/output/Task_2-2.parquet"
 
-    val OUTPUT_PATH = "/lab2/output/Task_2-2.parquet"
+    println("TASK 2.2 — Dynamic Percentile Population StdDev")
+    println(s"Input : $DATA_PATH")
+    println(s"Output: $OUTPUT_PATH")
 
-    println("TASK 2.2.2  -  Dynamic-Percentile Population Std Dev")
-
-    // STEP 1 — Chuẩn bị dữ liệu SKU-Tháng
+    // STEP 1 — Load và chuẩn hóa dữ liệu
     println("\n[STEP 1] Loading and preparing data...")
 
     val raw = spark.read
-      .option("header",      "true")
+      .option("header", "true")
       .option("inferSchema", "true")
       .csv(DATA_PATH)
 
-    // Đổi tên cột có ký tự đặc biệt để dùng col() thuận tiện
     val renamed = raw
-      .withColumnRenamed("Order ID",      "Order_ID")
+      .withColumnRenamed("Order ID", "Order_ID")
       .withColumnRenamed("promotion-ids", "promotion_ids")
 
-    // Bỏ hàng thiếu Amount hoặc SKU (không thể tính toán)
-    val base = renamed.filter(col("Amount").isNotNull && col("SKU").isNotNull)
+    val prepared = renamed
+      .withColumn("OrderDate", to_date(col("Date"), "MM-dd-yy"))
+      .withColumn("Month", month(col("OrderDate")))
+      .filter(
+        col("Order_ID").isNotNull &&
+        col("SKU").isNotNull &&
+        col("Amount").isNotNull &&
+        col("OrderDate").isNotNull &&
+        col("Month").isNotNull
+      )
+      .withColumn(
+        "promo_count",
+        when(col("promotion_ids").isNull || trim(col("promotion_ids")) === "", lit(0))
+          .otherwise(size(split(trim(col("promotion_ids")), ",")))
+      )
 
-    // Trích Tháng từ chuỗi định dạng "MM-dd-yy"
-    val withMonth = base.withColumn(
-      "Month",
-      month(to_date(col("Date"), "MM-dd-yy"))
-    )
-
-    // Đếm số lượng ID khuyến mãi mỗi đơn hàng:
-    //   - NULL hoặc chuỗi rỗng "" → 0
-    //   - Ngược lại: split theo dấu phẩy rồi đếm phần tử
-    //   LƯU Ý: Phải check cả trường hợp chuỗi rỗng vì split("", ",")
-    //   trả về Array("") có size = 1 (không phải 0), gây đếm sai.
-    val withPromo = withMonth.withColumn(
-      "promo_count",
-      when(col("promotion_ids").isNull || trim(col("promotion_ids")) === "", lit(0))
-        .otherwise(size(split(trim(col("promotion_ids")), ",")))
-    )
-
-    // DataFrame cốt lõi (cache để tái sử dụng nhiều lần)
-    val orders = withPromo
+    val orders = prepared
       .select(
         col("Order_ID"),
         col("SKU"),
@@ -100,37 +91,31 @@ object Task22 {
       .cache()
 
     val totalOrders = orders.count()
-    println(s"   Usable orders after filtering: $totalOrders")
+    println(s"Usable orders after filtering: $totalOrders")
 
-    // STEP 2 — Tính ngưỡng phân vị (2 cách)
-
-    // Cách 1 (Approximate): percentile_approx
-    //   - Dùng thuật toán Greenwald-Khanna sketch (accuracy = 10000)
-    //   - Tham số accuracy càng cao thì càng chính xác, tốn bộ nhớ hơn
-    def computeApprox(): DataFrame =
+    // STEP 2 — Tính percentile threshold bằng 2 cách
+    /*
+     * Approach 1 — Approximate percentile.
+     */
+    def computeApprox(): DataFrame = {
       orders
         .groupBy("SKU", "Month")
         .agg(
           percentile_approx(col("promo_count"), lit(0.80), lit(10000)).as("p80"),
           percentile_approx(col("promo_count"), lit(0.90), lit(10000)).as("p90")
         )
+    }
 
-    // Cách 2 (Exact): tự tính percentile bằng DataFrame/Window
-    //   - Đầu tiên gom tần suất promo_count trong từng nhóm (SKU, Month)
-    //       groupBy(SKU, Month, promo_count) → freq
-    //   - Sau đó sắp xếp promo_count tăng dần trong từng nhóm và tính cumulative count:
-    //       cum_freq = tổng freq từ promo_count nhỏ nhất đến promo_count hiện tại
-    //   - Tổng số đơn của nhóm:
-    //       n = tổng freq trong partition (SKU, Month)
-    //   - Vị trí percentile exact theo nearest-rank:
-    //       rank_p80 = ceil(n * 0.80)
-    //       rank_p90 = ceil(n * 0.90)
-    //   - Ngưỡng P80/P90 là promo_count nhỏ nhất sao cho:
-    //       cum_freq >= rank_p80 / rank_p90
-    val windowSpec = Window
-      .partitionBy("SKU", "Month")
-      .orderBy("promo_count")
-
+    /*
+     * Approach 2 — Exact percentile tự cài bằng nearest-rank.
+     *
+     * Với mỗi nhóm SKU-Month:
+     *   n = tổng số order
+     *   rank_p80 = ceil(0.80 * n)
+     *   rank_p90 = ceil(0.90 * n)
+     *
+     * Threshold là promo_count nhỏ nhất sao cho cumulative frequency >= rank.
+     */
     def computeExact(): DataFrame = {
       val counts = orders
         .groupBy("SKU", "Month", "promo_count")
@@ -162,138 +147,133 @@ object Task22 {
       p80.join(p90, Seq("SKU", "Month"), "inner")
     }
 
-    // STEP 3 — Benchmark: chạy mỗi cách 5 lần, đo mean & stddev (ms)
-    println("\n[STEP 3] Benchmarking (5 runs each)...")
+    // STEP 3 — Benchmark 5 lần
+    println("\n[STEP 3] Benchmarking percentile approaches...")
 
     val N_RUNS = 5
 
-    // Lưu kết quả của lần chạy CUỐI để dùng ở bước 4
     var thresholdsApprox: DataFrame = null
-    var thresholdsExact:  DataFrame = null
+    var thresholdsExact: DataFrame = null
 
-    // Cách 1: Approximate (percentile_approx)
-    // Mỗi lần: unpersist cache cũ → tính lại → cache mới → count để trigger
-    // unpersist() giữa các lần đảm bảo Spark tính lại từ đầu (đo thời gian thực)
     val timesApprox = (1 to N_RUNS).map { i =>
-      if (thresholdsApprox != null) thresholdsApprox.unpersist()
+      if (thresholdsApprox != null) thresholdsApprox.unpersist(blocking = true)
+
       val t = timeMs {
         val df = computeApprox().cache()
-        df.count()   // action bắt buộc — trigger toàn bộ DAG
+        df.count()
         thresholdsApprox = df
       }
-      println(s"   [approx] Run $i: ${t}ms")
+
+      println(s"[approx] Run $i: ${t} ms")
       t
     }
 
-    // Cách 2: Exact (percent_rank Window)
     val timesExact = (1 to N_RUNS).map { i =>
-      if (thresholdsExact != null) thresholdsExact.unpersist()
+      if (thresholdsExact != null) thresholdsExact.unpersist(blocking = true)
+
       val t = timeMs {
         val df = computeExact().cache()
-        df.count()   // action bắt buộc
+        df.count()
         thresholdsExact = df
       }
-      println(s"   [exact]  Run $i: ${t}ms")
+
+      println(s"[exact]  Run $i: ${t} ms")
       t
     }
 
     val (meanApprox, sdApprox) = meanStddev(timesApprox)
-    val (meanExact,  sdExact)  = meanStddev(timesExact)
+    val (meanExact, sdExact) = meanStddev(timesExact)
 
-    println("\n  Method                  Mean(ms)   Std(ms)")
-    println(f"  Approach 1 (approx)     ${meanApprox}%8.1f   ${sdApprox}%8.1f")
-    println(f"  Approach 2 (exact)      ${meanExact}%8.1f   ${sdExact}%8.1f")
+    println("\nBenchmark summary:")
+    println("Method                  Mean(ms)      Stddev(ms)")
+    println(f"Approx percentile       $meanApprox%10.2f      $sdApprox%10.2f")
+    println(f"Exact nearest-rank      $meanExact%10.2f      $sdExact%10.2f")
 
-    // STEP 4 — Lọc đơn hàng và tính stddev_pop(Amount)
-    // Sử dụng thresholdsExact (kết quả chính xác) làm ngưỡng chính thức.
-    // Nếu muốn dùng approx, đổi thresholdsExact → thresholdsApprox.
-    println("\n[STEP 4] Computing population stddev per SKU-Month group...")
+    // STEP 4 — Build result cho từng percentile
+    println("\n[STEP 4] Computing population stddev after percentile filtering...")
 
-    /**
-     * Với một ngưỡng cụ thể (P80 hoặc P90):
-     *   1. Join orders với bảng ngưỡng
-     *   2. Lọc: promo_count >= ngưỡng
-     *   3. groupBy(SKU, Month) → count + stddev_pop(Amount)
-     *   4. Nếu count < 2 → stddev = 0.0
-     *   5. Thêm cột nhãn percentile_level (P80 / P90)
-     */
     def buildResult(
-        thresholdsDF:    DataFrame,
-        thresholdCol:    String,          // "p80" hoặc "p90"
-        levelLabel:      String           // "P80" hoặc "P90"
+        thresholdsDF: DataFrame,
+        thresholdCol: String,
+        levelLabel: String,
+        methodLabel: String
     ): DataFrame = {
 
-      // Join để gắn ngưỡng vào từng đơn hàng
       val joined = orders.join(
         thresholdsDF.select("SKU", "Month", thresholdCol),
         Seq("SKU", "Month"),
         "inner"
       )
 
-      // Lọc: chỉ giữ đơn có promo_count >= ngưỡng phân vị
       val filtered = joined.filter(col("promo_count") >= col(thresholdCol))
 
-      // Tính count và stddev_pop cho mỗi nhóm
       filtered
         .groupBy("SKU", "Month")
         .agg(
-          count("Order_ID").as("order_count"),
+          count("Order_ID").as("qualifying_orders"),
           stddev_pop(col("Amount")).as("_raw_stddev")
         )
-        // Logic ngoại lệ: nhóm < 2 đơn hợp lệ → gán stddev = 0
         .withColumn(
           "stddev_amount",
-          when(col("order_count") < 2, lit(0.0))
+          when(col("qualifying_orders") < 2, lit(0.0))
             .otherwise(col("_raw_stddev"))
         )
         .drop("_raw_stddev")
         .withColumn("percentile_level", lit(levelLabel))
+        .withColumn("method", lit(methodLabel))
     }
 
-    // Tính kết quả cho cả 2 phương pháp Exact và Approx
-    val resultP80_exact = buildResult(thresholdsExact, "p80", "P80")
-    val resultP90_exact = buildResult(thresholdsExact, "p90", "P90")
+    val resultP80Approx = buildResult(thresholdsApprox, "p80", "P80", "approx")
+    val resultP90Approx = buildResult(thresholdsApprox, "p90", "P90", "approx")
+    val resultP80Exact = buildResult(thresholdsExact, "p80", "P80", "exact")
+    val resultP90Exact = buildResult(thresholdsExact, "p90", "P90", "exact")
 
-    val resultP80_approx = buildResult(thresholdsApprox, "p80", "P80")
-    val resultP90_approx = buildResult(thresholdsApprox, "p90", "P90")
+    // STEP 5 — Tạo final DataFrame dạng wide để dễ kiểm tra/chấm
+    println("\n[STEP 5] Merging final output...")
 
-    // Bảng tổng số đơn
     val totalOrdersDF = orders
       .groupBy("SKU", "Month")
       .agg(count("Order_ID").as("total_orders"))
 
-    // Đổi tên các bảng Thresholds
     val threshApprox = thresholdsApprox
       .withColumnRenamed("p80", "threshold_p80_approx")
       .withColumnRenamed("p90", "threshold_p90_approx")
-    
+
     val threshExact = thresholdsExact
       .withColumnRenamed("p80", "threshold_p80_exact")
       .withColumnRenamed("p90", "threshold_p90_exact")
 
-    // Đổi tên các bảng Result
-    val resP80Approx = resultP80_approx
-      .withColumnRenamed("stddev_amount", "stddev_p80_approx")
-      .withColumnRenamed("order_count", "orders_p80_approx")
-      .drop("percentile_level")
+    val resP80Approx = resultP80Approx
+      .select(
+        col("SKU"),
+        col("Month"),
+        col("qualifying_orders").as("orders_p80_approx"),
+        col("stddev_amount").as("stddev_p80_approx")
+      )
 
-    val resP90Approx = resultP90_approx
-      .withColumnRenamed("stddev_amount", "stddev_p90_approx")
-      .withColumnRenamed("order_count", "orders_p90_approx")
-      .drop("percentile_level")
+    val resP90Approx = resultP90Approx
+      .select(
+        col("SKU"),
+        col("Month"),
+        col("qualifying_orders").as("orders_p90_approx"),
+        col("stddev_amount").as("stddev_p90_approx")
+      )
 
-    val resP80Exact = resultP80_exact
-      .withColumnRenamed("stddev_amount", "stddev_p80_exact")
-      .withColumnRenamed("order_count", "orders_p80_exact")
-      .drop("percentile_level")
+    val resP80Exact = resultP80Exact
+      .select(
+        col("SKU"),
+        col("Month"),
+        col("qualifying_orders").as("orders_p80_exact"),
+        col("stddev_amount").as("stddev_p80_exact")
+      )
 
-    val resP90Exact = resultP90_exact
-      .withColumnRenamed("stddev_amount", "stddev_p90_exact")
-      .withColumnRenamed("order_count", "orders_p90_exact")
-      .drop("percentile_level")
-
-    // STEP 5 — Gộp tất cả thành 1 DataFrame siêu chi tiết (Wide format)
-    println("\n[STEP 5] Merging results and writing Parquet to HDFS...")
+    val resP90Exact = resultP90Exact
+      .select(
+        col("SKU"),
+        col("Month"),
+        col("qualifying_orders").as("orders_p90_exact"),
+        col("stddev_amount").as("stddev_p90_exact")
+      )
 
     val joinCols = Seq("SKU", "Month")
 
@@ -304,59 +284,53 @@ object Task22 {
       .join(resP90Approx, joinCols, "left")
       .join(resP80Exact, joinCols, "left")
       .join(resP90Exact, joinCols, "left")
-      .na.fill(0.0, Seq("stddev_p80_approx", "stddev_p90_approx", "stddev_p80_exact", "stddev_p90_exact"))
-      .na.fill(0, Seq("orders_p80_approx", "orders_p90_approx", "orders_p80_exact", "orders_p90_exact"))
+      .na.fill(
+        0.0,
+        Seq(
+          "stddev_p80_approx",
+          "stddev_p90_approx",
+          "stddev_p80_exact",
+          "stddev_p90_exact"
+        )
+      )
+      .na.fill(
+        0,
+        Seq(
+          "orders_p80_approx",
+          "orders_p90_approx",
+          "orders_p80_exact",
+          "orders_p90_exact"
+        )
+      )
       .select(
-        "SKU", "Month", "total_orders",
-        "threshold_p80_approx", "threshold_p90_approx",
-        "orders_p80_approx", "orders_p90_approx",
-        "stddev_p80_approx", "stddev_p90_approx",
-        "threshold_p80_exact", "threshold_p90_exact",
-        "orders_p80_exact", "orders_p90_exact",
-        "stddev_p80_exact", "stddev_p90_exact"
+        col("SKU"),
+        col("Month"),
+        col("total_orders"),
+
+        col("threshold_p80_approx"),
+        col("orders_p80_approx"),
+        col("stddev_p80_approx"),
+
+        col("threshold_p90_approx"),
+        col("orders_p90_approx"),
+        col("stddev_p90_approx"),
+
+        col("threshold_p80_exact"),
+        col("orders_p80_exact"),
+        col("stddev_p80_exact"),
+
+        col("threshold_p90_exact"),
+        col("orders_p90_exact"),
+        col("stddev_p90_exact")
       )
 
-    // Lưu ra thư mục staging tạm
-    val STAGING_PATH = OUTPUT_PATH + "_staging"
-    finalDF
-      .repartition(1)
-      .write
-      .mode("overwrite")
-      .parquet(STAGING_PATH)
+    finalDF.cache()
+    println(s"Final output groups: ${finalDF.count()}")
 
-    // Dùng Hadoop FileSystem API để copy file part-*.parquet thành file duy nhất đúng với yêu cầu
-    val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
-    val stagingDir = new Path(STAGING_PATH)
-    val outputFile = new Path(OUTPUT_PATH)
+    // STEP 6 — Accuracy comparison approx vs exact
+    println("\n[STEP 6] Comparing approx vs exact thresholds...")
 
-    if (fs.exists(outputFile)) {
-      fs.delete(outputFile, true)
-    }
-
-    val filesStatus = fs.listStatus(stagingDir)
-    
-    var partFilePath: Path = null
-    var i = 0
-    while (i < filesStatus.length) {
-      if (filesStatus(i).getPath.getName.startsWith("part-")) {
-        partFilePath = filesStatus(i).getPath
-      }
-      i += 1
-    }
-    
-    if (partFilePath != null) {
-      fs.rename(partFilePath, outputFile)
-    }
-
-    // Xoá thư mục staging
-    fs.delete(stagingDir, true)
-
-    println(s"   [OK] Data exported to single file: $OUTPUT_PATH")
-
-    // STEP 6 — So sánh nhanh approx vs exact (phục vụ báo cáo)
-    println("\n[STEP 6] Accuracy comparison: approx vs exact thresholds...")
-
-    val combined = thresholdsApprox
+    val thresholdComparison = thresholdsApprox
       .withColumnRenamed("p80", "p80_approx")
       .withColumnRenamed("p90", "p90_approx")
       .join(
@@ -366,46 +340,147 @@ object Task22 {
         Seq("SKU", "Month"),
         "inner"
       )
+      .withColumn("p80_diff", col("p80_approx") - col("p80_exact"))
+      .withColumn("p90_diff", col("p90_approx") - col("p90_exact"))
 
-    val totalGroups = combined.count()
+    val totalGroups = thresholdComparison.count()
 
-    val mismatchP80 = combined
-      .filter(col("p80_approx") =!= col("p80_exact"))
-    val mismatchP90 = combined
-      .filter(col("p90_approx") =!= col("p90_exact"))
+    val mismatchP80 = thresholdComparison.filter(col("p80_approx") =!= col("p80_exact"))
+    val mismatchP90 = thresholdComparison.filter(col("p90_approx") =!= col("p90_exact"))
 
     val nMismatchP80 = mismatchP80.count()
     val nMismatchP90 = mismatchP90.count()
 
-    println(s"   Total SKU-Month groups         : $totalGroups")
-    println(s"   Groups with P80 mismatch       : $nMismatchP80 " +
-            f"(${nMismatchP80 * 100.0 / totalGroups}%.1f%%)")
-    println(s"   Groups with P90 mismatch       : $nMismatchP90 " +
-            f"(${nMismatchP90 * 100.0 / totalGroups}%.1f%%)")
+    println(s"Total SKU-month groups      : $totalGroups")
+    println(f"P80 threshold mismatches    : $nMismatchP80 (${nMismatchP80 * 100.0 / totalGroups}%.2f%%)")
+    println(f"P90 threshold mismatches    : $nMismatchP90 (${nMismatchP90 * 100.0 / totalGroups}%.2f%%)")
 
-    // Nhóm nào có tập đơn hàng hợp lệ hoặc độ lệch chuẩn khác nhau?
-    val p80ApproxLog = resultP80_approx
-      .select(col("SKU"), col("Month"), col("order_count").as("count_approx"), col("stddev_amount").as("stddev_approx"))
-    val p80ExactLog  = resultP80_exact
-      .select(col("SKU"), col("Month"), col("order_count").as("count_exact"), col("stddev_amount").as("stddev_exact"))
+    println("\nTop P80 threshold differences:")
+    if (nMismatchP80 > 0) {
+      mismatchP80
+        .withColumn("abs_p80_diff", abs(col("p80_diff")))
+        .orderBy(col("abs_p80_diff").desc)
+        .drop("abs_p80_diff")
+        .show(20, false)
+    } else {
+      println("No P80 threshold differences found.")
+    }
 
-    val orderDiff = p80ApproxLog
-      .join(p80ExactLog, Seq("SKU", "Month"), "inner")
-      .filter(col("count_approx") =!= col("count_exact") || round(col("stddev_approx"), 4) =!= round(col("stddev_exact"), 4))
+    println("\nTop P90 threshold differences:")
+    if (nMismatchP90 > 0) {
+      mismatchP90
+        .withColumn("abs_p90_diff", abs(col("p90_diff")))
+        .orderBy(col("abs_p90_diff").desc)
+        .drop("abs_p90_diff")
+        .show(20, false)
+    } else {
+      println("No P90 threshold differences found.")
+    }
 
-    val nOrderDiff = orderDiff.count()
-    println(s"\n   Groups (P80) with different eligible order counts / stddev: $nOrderDiff")
+    // STEP 7 — So sánh qualifying orders và stddev giữa approx vs exact
+    println("\n[STEP 7] Comparing qualifying order sets approx vs exact...")
 
-    // Có nhóm nào > 1,000 đơn không?
-    val largeGroups = orders
-      .groupBy("SKU", "Month")
-      .agg(count("Order_ID").as("cnt"))
-      .filter(col("cnt") > 1000)
-    val nLarge = largeGroups.count()
-    println(s"\n   SKU-Month groups with > 1,000 orders: $nLarge")
+    val p80OrderDiff = finalDF
+      .filter(
+        col("orders_p80_approx") =!= col("orders_p80_exact") ||
+        round(col("stddev_p80_approx"), 6) =!= round(col("stddev_p80_exact"), 6)
+      )
 
-    println("\n[OK] Task 2.2.2 completed successfully.")
-    println(s"  Output: $OUTPUT_PATH")
+    val p90OrderDiff = finalDF
+      .filter(
+        col("orders_p90_approx") =!= col("orders_p90_exact") ||
+        round(col("stddev_p90_approx"), 6) =!= round(col("stddev_p90_exact"), 6)
+      )
+
+    val nP80OrderDiff = p80OrderDiff.count()
+    val nP90OrderDiff = p90OrderDiff.count()
+
+    println(s"P80 groups with different qualifying order counts/stddev: $nP80OrderDiff")
+    println(s"P90 groups with different qualifying order counts/stddev: $nP90OrderDiff")
+
+    println("\nSample P80 order/stddev differences:")
+    if (nP80OrderDiff > 0) {
+      p80OrderDiff.show(20, false)
+    } else {
+      println("No P80 order/stddev differences found.")
+    }
+
+    println("\nSample P90 order/stddev differences:")
+    if (nP90OrderDiff > 0) {
+      p90OrderDiff.show(20, false)
+    } else {
+      println("No P90 order/stddev differences found.")
+    }
+
+    // STEP 8 — Kiểm tra nhóm lớn > 1000 orders
+    println("\n[STEP 8] Checking large SKU-month groups...")
+
+    val largeGroups = totalOrdersDF
+      .filter(col("total_orders") > 1000)
+      .orderBy(desc("total_orders"))
+
+    val nLargeGroups = largeGroups.count()
+    println(s"Number of SKU-month groups with more than 1000 orders: $nLargeGroups")
+
+    if (nLargeGroups > 0) {
+      println("\nLarge groups:")
+      largeGroups.show(50, false)
+
+    }
+
+    // STEP 9 — Xuất single Parquet file
+    println("\n[STEP 9] Writing output as a single Parquet file...")
+
+    val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
+
+    val outputFile = new Path(OUTPUT_PATH)
+    val stagingDir = new Path(OUTPUT_PATH + "_staging")
+
+    if (fs.exists(stagingDir)) {
+      fs.delete(stagingDir, true)
+    }
+
+    if (fs.exists(outputFile)) {
+      fs.delete(outputFile, true)
+    }
+
+    finalDF
+      .repartition(1)
+      .write
+      .mode("overwrite")
+      .parquet(stagingDir.toString)
+
+    val partFiles = fs
+      .listStatus(stagingDir)
+      .filter(status => status.getPath.getName.startsWith("part-") && status.getPath.getName.endsWith(".parquet"))
+
+    if (partFiles.isEmpty) {
+      throw new RuntimeException("No part-*.parquet file found in staging output.")
+    }
+
+    val partFile = partFiles(0).getPath
+
+    val renamedOk = fs.rename(partFile, outputFile)
+    if (!renamedOk) {
+      throw new RuntimeException(s"Failed to rename $partFile to $outputFile")
+    }
+
+    fs.delete(stagingDir, true)
+
+    println(s"Single Parquet file written to: $OUTPUT_PATH")
+
+    // STEP 10 — Test đọc lại output bằng Spark
+    println("\n[STEP 10] Verifying output can be read by Spark...")
+
+    val verifyDF = spark.read.parquet(OUTPUT_PATH)
+    println(s"Verified output rows: ${verifyDF.count()}")
+
+    println("Task 2.2 completed successfully.")
+
+    orders.unpersist()
+    finalDF.unpersist()
+    thresholdsApprox.unpersist()
+    thresholdsExact.unpersist()
 
     spark.stop()
   }

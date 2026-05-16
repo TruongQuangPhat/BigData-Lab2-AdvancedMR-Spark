@@ -229,7 +229,6 @@ sed -i '2,${/^Month,State/d}' ../../results/Task_1-2.csv
 cd ../..
 ```
 
-<<<<<<< HEAD
 ---
 
 ## TASK 2-2: POPULATION STANDARD DEVIATION WITH DYNAMIC PERCENTILES (SPARK)
@@ -266,7 +265,6 @@ cd ../..
 ## KIỂM TRA ĐỊNH DẠNG KẾT QUẢ
 
 Các file kết quả sẽ được lưu tại `src/Task_1-1/Task_1-1.csv`, `src/Task_1-2/Task_1-2.csv` và `Task_2-2.parquet`.
-=======
 ## KIỂM TRA ĐỊNH DẠNG KẾT QUẢ
 
 Các file kết quả cuối cùng được lưu tại:
@@ -285,7 +283,6 @@ head results/Task_1-2.csv
 ```
 
 ### Task 1-1 Output Format
->>>>>>> d48b9eb640d9cb778e0fc4f86d9bf2261654779f
 
 ```csv
 State,TargetDate,MostBoughtSize,Count
@@ -303,15 +300,12 @@ Month,State,MedianVariety
 ...
 ```
 
-<<<<<<< HEAD
 ### Task 2-2 Output Format (`Task_2-2.parquet`):
 Định dạng file xuất ra là **Parquet** dạng Wide format, bao gồm 15 cột:
 `SKU, Month, total_orders, threshold_p80_approx, threshold_p90_approx, orders_p80_approx, orders_p90_approx, stddev_p80_approx, stddev_p90_approx, threshold_p80_exact, threshold_p90_exact, orders_p80_exact, orders_p90_exact, stddev_p80_exact, stddev_p90_exact`
 
 ---
-=======
 ## QUY TRÌNH TỰ ĐỘNG HÓA: BUILD & RUN ALL
->>>>>>> d48b9eb640d9cb778e0fc4f86d9bf2261654779f
 
 Dự án cung cấp script `build_and_run_all.sh` để tự động hóa quy trình chạy hai bài MapReduce hiện tại.
 
@@ -347,7 +341,6 @@ chmod +x build_and_run_all.sh
 ### 3. Kiểm tra kết quả
 
 ```bash
-<<<<<<< HEAD
 #!/bin/bash
 
 echo "--- PREPARING HDFS ---"
@@ -398,11 +391,9 @@ hadoop fs -get /lab2/output/Task_2-2.parquet ./Task_2-2.parquet
 cd ../..
 
 echo "HOÀN TẤT BUILD VÀ CHẠY TOÀN BỘ PROJECT!"
-=======
 tree results
 head results/Task_1-1.csv
 head results/Task_1-2.csv
->>>>>>> d48b9eb640d9cb778e0fc4f86d9bf2261654779f
 ```
 
 ## QUY TRÌNH BENCHMARK
