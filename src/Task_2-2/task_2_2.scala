@@ -18,18 +18,14 @@ import java.nio.file.{Files, Paths, StandardCopyOption}
  */
 object Task22 {
 
-  // -----------------------------------------------------------------------
   // Helper: đo thời gian thực thi (ms) của một khối code
-  // -----------------------------------------------------------------------
   def timeMs(block: => Unit): Long = {
     val t0 = System.currentTimeMillis()
     block
     System.currentTimeMillis() - t0
   }
 
-  // -----------------------------------------------------------------------
   // Helper: tính mean và population stddev của một dãy Long
-  // -----------------------------------------------------------------------
   def meanStddev(samples: Seq[Long]): (Double, Double) = {
     val n    = samples.length.toDouble
     val mean = samples.sum / n
@@ -37,9 +33,7 @@ object Task22 {
     (mean, math.sqrt(variance))
   }
 
-  // -----------------------------------------------------------------------
   // Main
-  // -----------------------------------------------------------------------
   def main(args: Array[String]): Unit = {
 
     val spark = SparkSession.builder()
@@ -60,13 +54,9 @@ object Task22 {
 
     val OUTPUT_PATH = "hdfs:///lab03/output/Task_2-2.parquet"
 
-    println("=" * 65)
     println("TASK 2.2.2  -  Dynamic-Percentile Population Std Dev")
-    println("=" * 65)
 
-    // ====================================================================
     // STEP 1 — Chuẩn bị dữ liệu SKU-Tháng
-    // ====================================================================
     println("\n[STEP 1] Loading and preparing data...")
 
     val raw = spark.read
@@ -113,15 +103,11 @@ object Task22 {
     val totalOrders = orders.count()
     println(s"   Usable orders after filtering: $totalOrders")
 
-    // ====================================================================
     // STEP 2 — Tính ngưỡng phân vị (2 cách)
-    // ====================================================================
 
-    // ------------------------------------------------------------------
     // Cách 1 (Approximate): percentile_approx
     //   - Dùng thuật toán Greenwald-Khanna sketch (accuracy = 10000)
     //   - Tham số accuracy càng cao thì càng chính xác, tốn bộ nhớ hơn
-    // ------------------------------------------------------------------
     def computeApprox(): DataFrame =
       orders
         .groupBy("SKU", "Month")
@@ -130,14 +116,12 @@ object Task22 {
           percentile_approx(col("promo_count"), lit(0.90), lit(10000)).as("p90")
         )
 
-    // ------------------------------------------------------------------
     // Cách 2 (Exact): Window percent_rank()
     //   - partitionBy(SKU, Month) → Spark shuffle tất cả hàng cùng nhóm
     //     về cùng 1 executor (đảm bảo tính đúng thứ hạng)
     //   - orderBy(promo_count) → sắp xếp tăng dần trong mỗi partition
     //   - percent_rank() = (rank - 1) / (N - 1)  (0.0 → 1.0)
     //   - Ngưỡng P80 = min(promo_count) với percent_rank >= 0.80
-    // ------------------------------------------------------------------
     val windowSpec = Window
       .partitionBy("SKU", "Month")
       .orderBy("promo_count")
@@ -152,9 +136,7 @@ object Task22 {
         )
     }
 
-    // ====================================================================
     // STEP 3 — Benchmark: chạy mỗi cách 5 lần, đo mean & stddev (ms)
-    // ====================================================================
     println("\n[STEP 3] Benchmarking (5 runs each)...")
 
     val N_RUNS = 5
@@ -163,7 +145,7 @@ object Task22 {
     var thresholdsApprox: DataFrame = null
     var thresholdsExact:  DataFrame = null
 
-    // --- Cách 1: Approximate (percentile_approx) ---
+    // Cách 1: Approximate (percentile_approx)
     // Mỗi lần: unpersist cache cũ → tính lại → cache mới → count để trigger
     // unpersist() giữa các lần đảm bảo Spark tính lại từ đầu (đo thời gian thực)
     val timesApprox = (1 to N_RUNS).map { i =>
@@ -177,7 +159,7 @@ object Task22 {
       t
     }
 
-    // --- Cách 2: Exact (percent_rank Window) ---
+    // Cách 2: Exact (percent_rank Window)
     val timesExact = (1 to N_RUNS).map { i =>
       if (thresholdsExact != null) thresholdsExact.unpersist()
       val t = timeMs {
@@ -192,19 +174,13 @@ object Task22 {
     val (meanApprox, sdApprox) = meanStddev(timesApprox)
     val (meanExact,  sdExact)  = meanStddev(timesExact)
 
-    println("\n  +-----------------------+----------+----------+")
-    println("  | Method                | Mean(ms) |  Std(ms) |")
-    println("  +-----------------------+----------+----------+")
-    println(f"  | Approach 1 (approx)   | ${meanApprox}%8.1f | ${sdApprox}%8.1f |")
-    println(f"  | Approach 2 (exact)    | ${meanExact}%8.1f | ${sdExact}%8.1f |")
-    println("  +-----------------------+----------+----------+")
+    println("\n  Method                  Mean(ms)   Std(ms)")
+    println(f"  Approach 1 (approx)     ${meanApprox}%8.1f   ${sdApprox}%8.1f")
+    println(f"  Approach 2 (exact)      ${meanExact}%8.1f   ${sdExact}%8.1f")
 
-    // ====================================================================
     // STEP 4 — Lọc đơn hàng và tính stddev_pop(Amount)
-    //
     // Sử dụng thresholdsExact (kết quả chính xác) làm ngưỡng chính thức.
     // Nếu muốn dùng approx, đổi thresholdsExact → thresholdsApprox.
-    // ====================================================================
     println("\n[STEP 4] Computing population stddev per SKU-Month group...")
 
     /**
@@ -252,9 +228,7 @@ object Task22 {
     val resultP80 = buildResult(thresholdsExact, "p80", "P80")
     val resultP90 = buildResult(thresholdsExact, "p90", "P90")
 
-    // ====================================================================
     // STEP 5 — Gộp P80 + P90 thành 1 DataFrame, xuất PARQUET trực tiếp lên HDFS
-    // ====================================================================
     println("\n[STEP 5] Merging results and writing Parquet to HDFS...")
 
     val finalDF = resultP80
@@ -277,9 +251,7 @@ object Task22 {
 
     println(s"   [OK] Data saved to HDFS directory: $OUTPUT_PATH")
 
-    // ====================================================================
     // STEP 6 — So sánh nhanh approx vs exact (phục vụ báo cáo)
-    // ====================================================================
     println("\n[STEP 6] Accuracy comparison: approx vs exact thresholds...")
 
     val combined = thresholdsApprox
@@ -345,10 +317,8 @@ object Task22 {
     println(s"\n   SKU-Month groups with > 1,000 orders: $nLarge")
     if (nLarge > 0) largeGroups.orderBy(col("cnt").desc).show(10, truncate = false)
 
-    println("\n" + "=" * 65)
-    println("[OK] Task 2.2.2 completed successfully.")
+    println("\n[OK] Task 2.2.2 completed successfully.")
     println(s"  Output: $OUTPUT_PATH")
-    println("=" * 65)
 
     spark.stop()
   }
