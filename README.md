@@ -348,8 +348,8 @@ spark-submit \
   --class Task22 \
   --master local[*] \
   SparkTask22.jar \
-  "$SPARK_INPUT_PATH" \
-  "$SPARK_TASK22_OUTPUT_PATH" 2>&1 | tee ../../logs/task_2-2_stats.log
+  hdfs://localhost:9000/lab03/input/Amazon_Sale_Report.csv \
+  hdfs://localhost:9000/lab03/output/Task_2-2.parquet 2>&1 | tee ../../logs/task_2-2_stats.log
 ```
 
 ### 4. Lấy kết quả Parquet về máy
