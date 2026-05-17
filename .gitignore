@@ -11,11 +11,8 @@ classes/
 
 !data/Amazon_Sale_Report.csv
 
-!results/
-!results/**
 !results/*.csv
 !results/*.parquet
-!results/**/*.parquet
 
 target/
 project/target/
