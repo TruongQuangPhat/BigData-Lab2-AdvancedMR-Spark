@@ -45,8 +45,8 @@
 26/05/16 17:23:25 INFO BlockManagerMaster: Registered BlockManager BlockManagerId(driver, 10.255.255.254, 32933, None)
 26/05/16 17:23:25 INFO BlockManager: Initialized BlockManager: BlockManagerId(driver, 10.255.255.254, 32933, None)
 TASK 2.2 — Dynamic Percentile Population StdDev
-Input : /lab2/input/Amazon_Sale_Report.csv
-Output: /lab2/output/Task_2-2.parquet
+Input : /lab3/input/Amazon_Sale_Report.csv
+Output: /lab3/output/Task_2-2.parquet
 
 [STEP 1] Loading and preparing data...
 Usable orders after filtering: 121180
@@ -98,7 +98,7 @@ No P90 order/stddev differences found.
 Number of SKU-month groups with more than 1000 orders: 0
 
 [STEP 9] Writing output as a single Parquet file...
-Single Parquet file written to: /lab2/output/Task_2-2.parquet
+Single Parquet file written to: /lab3/output/Task_2-2.parquet
 
 [STEP 10] Verifying output can be read by Spark...
 Verified output rows: 16345

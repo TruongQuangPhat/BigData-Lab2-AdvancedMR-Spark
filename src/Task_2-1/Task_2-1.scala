@@ -1,4 +1,4 @@
-package lab2.task21
+package lab3.task21
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions._

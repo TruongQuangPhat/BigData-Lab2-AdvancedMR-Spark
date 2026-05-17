@@ -45,8 +45,8 @@ object Task22 {
     spark.sparkContext.setLogLevel("WARN")
     import spark.implicits._
 
-    val DATA_PATH = if (args.length >= 1) args(0) else "/lab2/input/Amazon_Sale_Report.csv"
-    val OUTPUT_PATH = if (args.length >= 2) args(1) else "/lab2/output/Task_2-2.parquet"
+    val DATA_PATH = if (args.length >= 1) args(0) else "/lab3/input/Amazon_Sale_Report.csv"
+    val OUTPUT_PATH = if (args.length >= 2) args(1) else "/lab3/output/Task_2-2.parquet"
 
     println("TASK 2.2 — Dynamic Percentile Population StdDev")
     println(s"Input : $DATA_PATH")
