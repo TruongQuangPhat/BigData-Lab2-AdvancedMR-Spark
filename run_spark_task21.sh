@@ -34,7 +34,7 @@ scalac -classpath "$H_CLASSPATH:$SPARK_HOME/jars/*" -d classes "$SCALA_FILE"
 if [ $? -ne 0 ]; then echo "Lỗi biên dịch!"; exit 1; fi
 jar -cvf $JAR_NAME -C classes lab2
 
-echo "=== [3/3] Thực thi Spark Job (Xuất Parquet) ==="
+echo "=== [3/3] Thực thi Spark Job ==="
 rm -rf $OUTPUT_DIR
 spark-submit \
     --class $MAIN_CLASS \

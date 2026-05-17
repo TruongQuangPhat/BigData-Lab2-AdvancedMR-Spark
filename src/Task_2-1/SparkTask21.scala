@@ -19,25 +19,20 @@ object SparkTask21 {
       // .master("local[*]") // uncomment if running locally without spark-submit
       .getOrCreate()
 
-    // Required for some dataframe operations
     spark.sparkContext.setLogLevel("ERROR")
 
-    // Load CSV
     val rawDf = spark.read
       .option("header", "true")
       .option("inferSchema", "true")
       .csv(inputPath)
 
-    // Preprocessing: Parse Date and Amount
-    // Date format in CSV is MM-dd-yy (e.g., 04-30-22)
+    // Parse fields used for date arithmetic and numeric comparison.
     val df = rawDf
       .withColumn("ParsedDate", to_date(col("Date"), "MM-dd-yy"))
       .withColumn("AmountNum", col("Amount").cast(DoubleType))
 
-    // ------------------------------------------------------------------------
-    // JOB 1: Build Promotion
-    // "xây promotion (khác null, khác empty), groupby id checkdate, lọc >= 2"
-    // ------------------------------------------------------------------------
+    // Job 1: Find temporally-valid promotions.
+    // active period = last appearance - first appearance >= 2 days.
     val validPromotionsDf = df
       .filter(col("promotion-ids").isNotNull && trim(col("promotion-ids")) =!= "")
       .withColumn("promotion_id", explode(split(col("promotion-ids"), ",")))
@@ -52,10 +47,7 @@ object SparkTask21 {
       .filter(col("active_period") >= 2)
       .select("promotion_id")
 
-    // ------------------------------------------------------------------------
-    // JOB 2: Count Promo by Order
-    // "đếm promo by order (table promo inner join order, groupby order đếm promo >= 3)"
-    // ------------------------------------------------------------------------
+    // Job 2: Find orders having at least 3 distinct valid promotions.
     val orderPromosDf = df
       .filter(col("promotion-ids").isNotNull && trim(col("promotion-ids")) =!= "")
       .select("Order ID", "promotion-ids")
@@ -63,45 +55,33 @@ object SparkTask21 {
       .withColumn("promotion_id", trim(col("promotion_id")))
       .join(validPromotionsDf, Seq("promotion_id"), "inner")
       .groupBy("Order ID")
-      .agg(count("promotion_id").alias("valid_promo_count"))
+      .agg(countDistinct("promotion_id").alias("valid_promo_count"))
       .filter(col("valid_promo_count") >= 3)
       .select("Order ID")
 
-    // ------------------------------------------------------------------------
-    // JOB 3: Filter Merchant & Shipped
-    // "groupby ship state, tính AVG (amount), table(state, avg)"
-    // ------------------------------------------------------------------------
+    // Job 3: Compute average merchant-shipped amount by state.
     val stateAvgDf = df
       .filter(col("Fulfilment") === "Merchant" && col("Courier Status") === "Shipped")
       .filter(col("ship-state").isNotNull && trim(col("ship-state")) =!= "")
-      // Convert to uppercase to prevent state name inconsistencies (similar to Task 1)
       .withColumn("ship-state-upper", upper(trim(col("ship-state"))))
       .groupBy("ship-state-upper")
       .agg(avg("AmountNum").alias("state_avg_amount"))
 
-    // ------------------------------------------------------------------------
-    // JOB 4: Find Qualified Orders
-    // "filter -> canceled -> join job 3 -> lọc amount < avg"
-    // "filter -> standard -> join job 2"
-    // ------------------------------------------------------------------------
+    // Job 4: Build the cancelled-Standard base orders.
     val targetOrdersDf = df
       .filter(col("Status") === "Cancelled" && col("ship-service-level") === "Standard")
       .filter(col("ship-city").isNotNull && trim(col("ship-city")) =!= "")
       .withColumn("ship-state-upper", upper(trim(col("ship-state"))))
       .withColumn("ship-city-upper", upper(trim(col("ship-city"))))
 
+    // Job 5: Keep orders with amount < state average and >= 3 valid promotions.
     val qualifiedOrdersDf = targetOrdersDf
-      // Join Job 3 (State Avg)
       .join(stateAvgDf, Seq("ship-state-upper"), "inner")
-      // Filter Amount < Avg
       .filter(col("AmountNum") < col("state_avg_amount"))
-      // Join Job 2 (Orders with >= 3 valid promos)
       .join(orderPromosDf, Seq("Order ID"), "inner")
 
-    // ------------------------------------------------------------------------
-    // JOB 5: Calculate Percentage per City
-    // "đếm order quality từ job 4 (numerator), đếm canceled standard -> denominator, join theo city"
-    // ------------------------------------------------------------------------
+    // Job 6: Calculate percentage per city.
+    // percentage = qualified cancelled-Standard orders / all cancelled-Standard orders.
     val denominatorDf = targetOrdersDf
       .groupBy("ship-city-upper")
       .agg(count("Order ID").alias("total_cancelled_standard"))
@@ -120,18 +100,12 @@ object SparkTask21 {
       )
       .orderBy("City")
 
-    // ========================================================================
-    // OUTPUT EXPLAIN PLAN TO CONSOLE AS REQUIRED
-    // ========================================================================
-    println("\n" + "="*80)
-    println(">>> EXTENDED EXECUTION PLAN FOR TASK 2-1 <<<")
-    println("="*80)
+    println("\n=== Task 2-1: extended execution plan ===")
     resultDf.explain(true)
-    println("="*80 + "\n")
+    println("=== End of plan ===\n")
 
-    // Save Output
     resultDf
-      .coalesce(1) // Export into a single file as required
+      .coalesce(1)
       .write
       .mode("overwrite")
       .parquet(outputPath)
